@@ -1,0 +1,40 @@
+name: stac-env
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - dask 
+  - earthengine-api
+  - folium
+  - geopandas
+  - graphviz
+  - imbalanced-learn
+  - jupyter
+  - matplotlib
+  - pandas
+  - pdal
+  - pystac=1.8
+  - pyproj
+  - python=3.10
+  - python-pdal
+  - rasterio
+  - rasterstats
+  - richdem
+  - rio-cogeo
+  - scikit-image
+  - scikit-learn
+  - scikit-optimize
+  - scipy
+  - seaborn
+  - shapely
+  - sphinx
+  - tqdm
+  - pysheds
+  - pip
+  - pip:
+      - autorank 
+      - geetools
+      - python-dotenv>=0.5.1
+      - -e . # change . to the desired local package path
