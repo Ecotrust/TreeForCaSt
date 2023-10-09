@@ -3,8 +3,16 @@ Fetch NAIP images from Google Earth Engine (GEE)
 """
 # %%
 from pathlib import Path
+import os
 import time
+from multiprocessing.pool import ThreadPool
+from functools import partial
+from PIL import Image
+import json
 
+import numpy as np
+from affine import Affine
+from shapely.geometry import box
 import ee
 import geopandas as gpd
 
@@ -12,11 +20,13 @@ from gdstools import (
     GEEImageLoader,
     ConfigLoader,
     multithreaded_execution,
-    infer_utm
+    infer_utm,
+    split_bbox,
+    save_cog
 )
 
 def timeit(method):
-    """Decorator that times the execution of a method and prints the time taken."""
+    """Decorator to time the execution of a function."""
     def timed(*args, **kwargs):
         start_time = time.time()
         result = method(*args, **kwargs)
@@ -26,15 +36,12 @@ def timeit(method):
     return timed
 
 # %%
-@timeit
 def naip_from_gee(
     bbox: list,
     year: int,
-    outpath: str or Path,
     outfilepref: str,
     epsg:int=4326,
     scale:int=1,
-    overwrite:bool=False
 ):
     """
     Fetch NAIP image url from Google Earth Engine (GEE) using a bounding box.
@@ -61,18 +68,14 @@ def naip_from_gee(
         .filterBounds(eebbox)
     )
 
-    colsize = collection.size().getInfo()
-
-    if colsize == 0:
+    if collection.size().getInfo() == 0:
         print(f"No images found for {year}")
-
         return 1
 
     date_range = collection.reduceColumns(ee.Reducer.minMax(), ['system:time_start'])
     ts_end, ts_start = date_range.getInfo().values()
 
-    outpath.mkdir(exist_ok=True, parents=True)
-
+    # outpath.mkdir(exist_ok=True, parents=True)
     try:
         image = GEEImageLoader(collection.median().clip(eebbox))
         image.metadata_from_collection(collection)
@@ -86,15 +89,149 @@ def naip_from_gee(
         image.set_viz_params("bands", ["R", "G", "B"])
         image.id = outfilepref
 
-        image.to_geotif(outpath, overwrite=overwrite)
-        image.save_metadata(outpath)
-        image.save_preview(outpath, overwrite=overwrite)
+        return image.to_array(), image.metadata 
 
     except Exception as e:
         print(f"Failed to load image for {outfilepref}: {e}")
         return 1
 
-    return 0
+
+def quad_fetch(
+        bbox: tuple, 
+        dim:int=1, 
+        num_threads:int=None, 
+        **kwargs
+    ):
+    """
+    Breaks user-provided bounding box into quadrants and retrieves data
+    using `fetcher` for each quadrant in parallel using a ThreadPool.
+
+    :param collection: Earth Engine image collection.
+    :type collection: ee.Collection
+    :param bbox: Coordinates of x_min, y_min, x_max, and y_max for bounding box of tile.
+    :type bbox: tuple
+    :param dim: Dimension of the quadrants to split the bounding box into. Default is 1.
+    :type dim: int, optional
+    :param num_threads: Number of threads to use for parallel executing of data requests. Default is None.
+    :type num_threads: int, optional
+
+    :return: Returns a tuple containing the image as a numpy array and its metadata as a dictionary.
+    :rtype: tuple
+    """
+    # def clip_image(bbox, scale, epsg):
+    #     ee_bbox = ee.Geometry.BBox(*bbox)
+    #     image = GEEImageLoader(collection.median().clip(ee_bbox))
+    #     image.set_params("scale", scale)
+    #     image.set_params("crs", f"EPSG:{epsg}")
+    #     return image.to_array()
+
+    if dim > 1:
+        if num_threads is None:
+            num_threads = dim**2
+
+        bboxes = split_bbox(dim, bbox)
+
+        get_quads = partial(naip_from_gee, **kwargs)
+        with ThreadPool(num_threads) as p:
+            quads = p.map(get_quads, bboxes)
+
+        # Split quads list in tuples of size dim
+        images = [x[0][0] for x in quads]
+        quad_list = [images[x:x + dim] for x in range(0, len(images), dim)]
+
+        # Reverse order of rows to match rasterio's convention
+        [x.reverse() for x in quad_list]
+        image = np.concatenate(
+            [
+                np.hstack(quad_list[x]) for x in range(0, len(quad_list))
+            ], 2
+        )
+
+        profile = quads[0][0][1]
+        first = quads[0][0][1]['transform']
+        last = quads[-1][0][1]['transform']
+        profile['transform'] = Affine(
+            first.a,
+            first.b,
+            first.c,
+            first.d,
+            first.e,
+            last.f
+        )
+        h, w = image.shape[1:]
+        profile.update(width=w, height=h)
+        profile['dtype'] = 'uint8'
+        metadata = quads[0][1]
+        metadata['type'] = 'Image'
+        metadata['properties']['system:footprint']['coordinates'] = list(box(*bbox).exterior.coords)
+
+        return image, profile, metadata
+
+    else:
+        return naip_from_gee(bbox, **kwargs)
+    
+
+@timeit
+def get_naip(
+    bbox:tuple, 
+    outpath: str or Path, 
+    outfilepref: str,
+    year:int, 
+    dim:int=3, 
+    overwrite:bool=False, 
+    # num_threads:int=None
+):
+    """
+    Downloads a NAIP image from Google Earth Engine and save it as a Cloud-Optimized GeoTIFF (COG) file.
+
+    :param bbox: list-like
+        list of bounding box coordinates (minx, miny, maxx, maxy)
+    :type bbox: list
+    :param year: int
+        year of the NAIP image to download
+    :type year: int
+    :param outpath: str or Path
+        path to save the downloaded image
+    :type outpath: str or Path
+    :param dim: int, optional
+        dimension of the image to download (default is 3)
+    :type dim: int
+    :param overwrite: bool, optional
+        whether to overwrite an existing file with the same name (default is False)
+    :type overwrite: bool
+    :param num_threads: int, optional
+        number of threads to use for downloading (default is None)
+    :type num_threads: int
+
+    :return: None
+    :rtype: None
+    """
+    print(f"Fetching {outfilepref}...")
+    if os.path.exists(outpath / f'{outfilepref}-cog.tif') and not overwrite:
+        print(f"{outpath} already exists. Skipping...")
+        return
+
+    try:
+        image, profile, metadata = quad_fetch(bbox, dim, None, outfilepref=outfilepref, year=year)
+    except Exception as e:
+        print(f"Failed to fetch {outfilepref}: {e}")
+        return
+
+    preview = Image.fromarray(
+        np.moveaxis(image[:3], 0, -1).astype(np.uint8)
+    ).convert('RGB')
+    h, w = preview.size
+    preview = preview.resize((w//10, h//10))
+    preview.save(outpath / f'{outfilepref}-preview.png', optimize=True)
+    # profile = ['properties']['profile']
+    # metadata['properties'].pop('profile')
+
+    with open(outpath / f'{outfilepref}-metadata.json', 'w') as f:
+        json.dump(metadata, f, indent=2)
+        
+    save_cog(image, profile, outpath / f'{outfilepref}-cog.tif', overwrite=overwrite)
+
+    return
 
 
 def bbox_padding(geom:object, padding:int=1e3):
@@ -127,11 +264,16 @@ if "__main__" == __name__:
     # Load config file
     conf = ConfigLoader(Path(__file__).parent.parent).load()
     api_url = conf['items']['naip']['providers']['Google']['api']
+    GRID = Path(conf.GRID)
+    grid = gpd.read_file(GRID)
+
     if run_as == 'dev':
         PLOTS = Path(conf.DEV_PLOTS)
         DATADIR = Path(conf.DEV_DATADIR)
         gdf = gpd.read_file(PLOTS)
-        gdf = gdf.iloc[:10].sort_values('uuid')
+        gdf = gdf.sort_values('uuid').iloc[:20]
+        ovly = grid.overlay(gdf)
+        gdf = grid[grid.CELL_ID.isin(ovly['CELL_ID'].unique())]
         
     else:
         PLOTS = conf.DEV_PLOTS
@@ -141,20 +283,23 @@ if "__main__" == __name__:
     ee.Initialize(opt_url=api_url)
 
     # Overwrite years if needed
-    years = [2013, 2014] #[2009, 2011, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+    years = [2009, 2011, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
 
     for year in years:
-        outpath = Path(DATADIR) / 'naip' / str(year)
+        outpath = Path(DATADIR) / 'fulltiles'/ 'naip' / str(year)
+        outpath.mkdir(exist_ok=True, parents=True)
 
         params = [
             {
-                "bbox": bbox_padding(row.geometry.centroid), #bbox_padding(row.geometry),
+                "bbox": row.geometry.bounds, #bbox_padding(row.geometry.centroid, padding=300), 
                 "year": year,
+                "dim": 6,
                 "outpath": outpath,
-                "outfilepref": f"{row.uuid}_{year}_{row.source}_NAIP_DOQQ",
+                "outfilepref": f"{row.CELL_ID}_{row.PRIMARY_STATE}_{year}_NAIP_DOQQ", #f"{row.uuid}_{year}_{row.source}_NAIP_DOQQ",
                 "overwrite": True
             } for row in gdf.itertuples()
         ]
 
-        multithreaded_execution(naip_from_gee, params, 10)
-        #naip_from_gee(**params[0])
+        # Product dim^2 x threads must be < 30 or else GEE will throw an error
+        multithreaded_execution(get_naip, params, 1)
+        # get_naip(**params[0])
