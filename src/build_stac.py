@@ -4,6 +4,7 @@ Build the STAC catalog for Oregon BLM and Washington St DNR forest stands.
 
 # %%
 import re
+import logging
 import json
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,7 @@ from pystac import (
 from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.label import LabelExtension, LabelType, LabelClasses
 from pystac.extensions.projection import ProjectionExtension
+from pystac.extensions.pointcloud import PointcloudExtension
 
 import numpy as np
 import geopandas as gpd
@@ -32,6 +34,8 @@ import rasterio
 from shapely import geometry
 
 from gdstools import ConfigLoader, image_collection, multithreaded_execution
+
+logging.basicConfig(filename='build_stac.log', encoding='utf-8', filemode='w', level=logging.INFO)
 
 # %%
 def bbox_to_json(bbox):
@@ -49,29 +53,23 @@ def bbox_to_json(bbox):
 
 # %%
 def create_label_item(
-    label_path: str,
+    row: pd.Series,
     attr_dict: dict,
     crs='EPSG:4326'
 ):
     """
     Create a label item.
 
-    :param label_path: The path to label geojson file.
-    :type label_path: str
-    :param attr_dict: Dictionary with attributes for the label item. Expected attributes: 
-        label_properties, label_date, label_description, label_type, label_tasks, 
-        and label_name.
-    :type attr_dict: dict
-    :param crs: Coordinate Reference System (CRS) of the label data, defaults to 'EPSG:4326'.
-    :type crs: str, optional
-    :return: A PySTAC Item representing the label data.
-    :rtype: pystac.Item
+    bbox
+    label_id
+    geometry as json
+
     """
     # Read label data
-    label_path = Path(label_path)
-    label_id = label_path.stem.replace('-cog', '')
-    label_data = gpd.read_file(label_path)
-    bbox = label_data.total_bounds.tolist()
+    # label_path = Path(label_path)
+    # label_data = gpd.read_file(label_path)
+    label_id = f'{row.uuid}_{row.year}_{row.source.lower()}-label'
+    bbox = list(row.geometry.bounds)
 
     if attr_dict['label_task'] in ['classification', 'segmentation']:
         label_classes = [
@@ -81,8 +79,9 @@ def create_label_item(
     else:
         label_classes = None
 
-    label_data = label_data.to_crs(crs)
+    label_data = gpd.GeoSeries(row.geometry, crs=crs)
     label_data = json.loads(label_data.to_json())
+    label_data['features'][0]['properties'] = row[2:-2].to_dict()
 
     # Create label item
     label_item = Item(
@@ -108,10 +107,10 @@ def create_label_item(
     )
 
     # Add link to label data
-    idx = label_path.as_posix().split('/').index('labels')
-    subdir = '/'.join(label_path.as_posix().split('/')[idx:-1])
-    url = 'https://fbstac-stands.s3.amazonaws.com/data/' + subdir + '/' + label_path.name
-    label_ext.add_geojson_labels(href=url)
+    # idx = label_path.as_posix().split('/').index('labels')
+    # subdir = '/'.join(label_path.as_posix().split('/')[idx:-1])
+    # url = 'https://fbstac-stands.s3.amazonaws.com/data/' + subdir + '/' + label_path.name
+    # label_ext.add_geojson_labels(href=url)
 
     return label_item, label_ext
 
@@ -221,6 +220,7 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
     :rtype: Catalog
     """
     # Load config file
+    logging.info('Loading config file')
     conf = ConfigLoader(rootpath).load()
     if run_as == 'dev':
         PLOTS = Path(conf.DEV_PLOTS)
@@ -231,7 +231,13 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
         DATADIR = Path(conf.DATADIR)
         PLOTATTRS = Path(conf.PLOTATTRS)
 
+    logging.info('Running build_stac.py as %s', run_as)
+    logging.info('Reading plot shapefile from %s', PLOTS)
+    logging.info('Reading plot attributes from %s', PLOTATTRS)
+    logging.info('Loading data from %s', DATADIR)
+
     plots_shp = gpd.read_file(PLOTS)
+    logging.info('Loaded plot shapefile with shape: %s', plots_shp.shape)
     
     # Build catalog
     """
@@ -267,7 +273,9 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
         1. Load plot geojson file 
         2. Load image paths and convert list to dict
         3. Load plot attributes (inventory_features.csv) and merge with plot geojson features
-        4. Organize items by agency-survey comb: {'agency-survey': 'labels': {}, 'datasets': {}}
+        4. Group items by agency-survey comb: {
+            'agency-survey': 'labels': [uuid list], 'datasets': {'3dep','naip','ls8','lidar','attrs'}
+        }
         
     """
     fbench = Catalog(
@@ -277,7 +285,7 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
     )
 
     datasets = image_collection(DATADIR)
-    images_dict = paths_to_dict(datasets, 5)
+    images_dict = paths_to_dict(datasets, 6)
     attrs = pd.read_csv(PLOTATTRS)
 
     # Drop tree species columns
@@ -285,39 +293,216 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
     merged = attrs.merge(plots_shp[['uuid', 'source', 'geometry']], on='uuid')
     merged = gpd.GeoDataFrame(merged, crs=plots_shp.crs, geometry=merged.geometry)
 
-    items_dict = {}
+    if run_as == 'dev':
+        allimg = []
+        for ds in images_dict: 
+            sbs = images_dict[ds]
+            if isinstance(sbs, dict):
+                for y in sbs: 
+                    allimg.append(sbs[y])
+            else:
+                allimg.append(sbs)
+
+        img_uuids = {Path(item).name.split('_')[0] for sublist in allimg for item in sublist}
+        merged = merged[merged.uuid.isin(img_uuids)]
+
+    logging.info(f'{len(datasets)} images and {len(images_dict)} datasets found: {list(images_dict.keys())}')
+    for dataset in images_dict:
+
+        dataset_paths = []
+        if isinstance(images_dict[dataset], dict):
+            logging.info(f'Dataset {dataset} contain images from multiple years.')
+            for year in images_dict[dataset]:
+                logging.info(f'Adding {len(images_dict[dataset][year])} images from {year}')
+                dataset_paths.extend(images_dict[dataset][year])
+            
+        else:
+            logging.info(f'Dataset {dataset} contain {len(images_dict[dataset])} images.')
+            dataset_paths = images_dict[dataset]
+
+        # Create one collection for each dataset
+        dts_info = conf['items'][dataset]
+
+        logging.info('Generating collection %s', dataset)
+        providers = [
+            Provider(
+                name=p.get('name', None), 
+                roles=[p.get('roles', None)], 
+                url=p.get('url', None)
+            )
+            for p in dts_info['providers'].values()
+        ]
+        fbench_collection = Collection(
+            id = f'{dataset}',
+            description = dts_info['description'],
+            providers = providers,
+            license=dts_info['license']['type'],
+            extent = {},
+        )
+
+        if dts_info['license']['url']:
+            license_link = Link(
+                rel='license', 
+                target=dts_info['license']['url'],
+                media_type='text/html'
+            )
+            fbench_collection.add_link(license_link)
+
+        logging.info(f'Adding collection {dataset} to catalog')
+        fbench.add_child(fbench_collection)
+
+
+    def nearest_matching_paths(_dict, uuids, year, max_year_distance=2):
+        _year = sorted([y for y in _dict.keys() if abs(int(y)-year) <= max_year_distance])
+        
+        if _year:
+            return [p for p in _dict.get(_year[0]) if Path(p).name.split('_')[0] in uuids]
+        else:
+            return []
+
+
     for survey, year in merged[['year', 'source']].groupby(
         ['source','year']).count().index.tolist():
 
-        for year, year_dict in year.items():
-            items_dict.setdefault(survey, {}).setdefault(
-                year, {'labels': year_dict})
-            cellids = [Path(p).stem.split('_')[0] for p in year_dict]
+        # Create and add items to collections
+        # Create label collection
+        uuids = merged.uuid[
+            (merged.source == survey) & (merged.year == year)
+        ].tolist()
+        
+        for dataset in images_dict.keys():
+            if isinstance(images_dict[dataset], dict):
+                dataset_paths = nearest_matching_paths(images_dict[dataset], uuids, year)
+                # print('\nAdding items to collection', dataset)
 
-            # add images
-            for coll, coll_dict in images_dict.items():
+            else:
+                dataset_paths = [p for p in images_dict[dataset] if Path(p).name.split('_')[0] in uuids]
 
-                if isinstance(coll_dict, dict):
-                    _year = min(coll_dict.keys(),
-                                key=lambda x: abs(int(x)-int(year)))
+            def add_item(image_path, collection):
+                thumbnail_path = image_path.replace('-cog.tif', '-preview.png')
+                metadata_path = image_path.replace(
+                    '-cog.tif', '-metadata.json')
+                idx = image_path.split('/').index(collection.id)
+                subdir = '/'.join(image_path.split('/')[idx:-1])
+                asset_path_url = 'https://fbstac-stands.s3.amazonaws.com/data/' + subdir + '/'
+                item = create_item(
+                    image_path, 
+                    thumbnail_path, 
+                    metadata_path, 
+                    asset_path_url
+                )
 
-                    if int(year) - int(_year) <= np.abs(2):
-                        _year_dict = coll_dict[_year]
-                        items_dict[survey][year]\
-                            .setdefault('items', {})\
-                            .setdefault(
-                                coll, [p for p in _year_dict if Path(p).stem.split('_')[0] in cellids])
+                collection.add_item(item)
+                return
+           
+            collection = fbench.get_child(dataset)
+            dataset_paths = [p for p in dataset_paths if Path(p).name.replace('-cog.tif', '') 
+                             not in [i.id for i in collection.get_items()]]
 
-                else:
-                    items_dict[survey][year]\
-                        .setdefault('items', {})\
-                        .setdefault(
-                            coll, [p for p in coll_dict if Path(p).stem.split('_')[0] in cellids])
+            if dataset_paths:
+                logging.info(f'Adding items for collection {dataset}')
 
+                params = [
+                    {
+                        'image_path': image_path,
+                        'collection': collection,
+                    }
+                    for image_path in dataset_paths
+                ]
+
+                multithreaded_execution(add_item, params)
+
+                datetimes = [item.datetime for item in collection.get_all_items()]
+
+                col_uuids = [Path(p).stem.split('_')[0] for p in dataset_paths]
+                aoi = merged[merged.uuid.isin(col_uuids)].total_bounds.tolist()
+                start_datetime = min(datetimes)
+                end_datetime = max(datetimes)
+                # for collection in fbench.get_all_collections():     
+                #     if collection.id == dataset:
+                collection.extent = Extent(
+                    spatial = SpatialExtent(aoi),
+                    temporal = TemporalExtent([[start_datetime, end_datetime]])
+                )
+
+    # Create labels and add references to source items.
+    # logging.info(f'Creating {survey} label and adding items and links to assets')
+    for survey in merged.source.unique():
+
+        logging.info(f'Creating {survey} label collection.')
+        start_datetime = datetime(int(year), 1, 1)
+        end_datetime = datetime(int(year), 12, 31)
+
+        aoi = merged[merged.source == survey].total_bounds.tolist()
+        label_info = conf['labels'][survey]
+        label_info.update({'label_date': start_datetime})
+        label_collection = Collection(
+            id=f'{survey.lower()}-plots',
+            description = label_info['description'],
+            license = label_info['label_license'],
+            providers= [
+                Provider(
+                    name=label_info['provider_name'], 
+                    roles=label_info['provider_roles'], 
+                    url=label_info['provider_url']
+                )
+            ],
+            extent = Extent(
+                SpatialExtent(aoi),
+                TemporalExtent([[start_datetime, end_datetime]])
+            )
+        )
+
+        if label_info['label_license']['url']:
+            label_link = Link(
+                rel = "license", 
+                target = label_info['label_license']['url'],
+                media_type = "text/html"
+            )
+            label_collection.add_link(label_link)
+
+        def add_label_item(row, label_info):
+            label_item, label_ext = create_label_item(row, label_info)
+
+            [
+                label_ext.add_source(item, assets=['image']) for item in fbench.get_items(recursive=True) 
+                if item.id.split('_')[0] == label_item.id.split('_')[0]
+            ]
+
+            label_collection.add_item(label_item)
+            return
+
+        sbs = merged[(merged.source == survey)]
+
+        params = [
+            {
+                'row': row,
+                'label_info': label_info,
+            }
+            for _, row in sbs.iterrows()
+        ]
+
+        multithreaded_execution(add_label_item, params)
+
+        print('\nAdding label collection to catalog')
+        fbench.add_child(label_collection)
+
+    fbench.normalize_hrefs('fbstac')
+    fbench.validate()
+    logging.info('Validation complete')
+    return fbench
 
 if __name__ == '__main__':
-    # build_stac(Path(__file__).parent.parent)
+
+    TARGET = '/home/ygalvan/stac/fbstac-plots'
     rootpath = Path(__file__).parent
     conf = ConfigLoader(rootpath).load()
 
-    build_stac(rootpath, run_as='dev')
+    fb = build_stac(rootpath, run_as='dev')
+    
+    # Save catalog
+    print('Saving catalog to', TARGET)
+    Path(TARGET).mkdir(parents=True, exist_ok=True)
+    fb.save(catalog_type=CatalogType.SELF_CONTAINED,
+                dest_href=TARGET)
+    print('Done!')
