@@ -1,16 +1,22 @@
 labels:
-  blm:
+  BLM-COOS:
     provider_name: Bureau of Land Management
-    provider_url: https://gbp-blm-egis.hub.arcgis.com/datasets/blm-or-forest-operations-inventory-vegetation-publication-hub/about
+    provider_url: 
     provider_roles: [licensor, producer, processor, host]
     description: > 
-      The label collection represent polygons from the BLM FOIVEG_POLY feature class, a detailed classification 
-      of vegetation that covers forested lands and non-forest lands with broad and general classifications. 
-      It includes related table data from the MicroStorms (MS) system to describe forest vegetation and delineates 
-      polygons primarily based on differences in vegetative cover, size, and age. FOIVEG_POLY attributes describe 
-      both the overall forest stand as well as the layers within that stand, including cover roles and ten-year age class.
+      The study area encompasses approximately 250,000 acres of land, comprising a combination of the USDI Bureau of Land Management (BLM) 
+      and Coquille tribal forests located within the southern coastal forests of Oregon. This region is part of a larger 1.6 million-acre 
+      expanse where LIDAR data was systematically gathered. The LIDAR data acquisition was facilitated through 
+      the Oregon LIDAR Consortium, focusing on the Oregon South Coast region and spanning from April 2008 to April 2009. LIDAR was acquired at 
+      an average of 8 pulses per square meter. The primary objectives of collecting this data were twofold: first, to generate comprehensive 
+      and high-resolution models of the bare ground surface; second, to provide point data that could accurately characterize the density 
+      and spatial distribution of forest vegetation across the entire surveyed area.
+
+      Tree measurements were conducted on a total of 899 plots, representing 6 tree height classes, within the study area during the years 
+      2010 and 2011. To ensure a representative and unbiased sample, a specific spatial constraint was imposed: no two plots, regardless of 
+      their origin, could be located within two neighboring cells of one another.
     label_type: vector
-    label_properties: [AGECLS_10]
+    label_properties: [aboveground_biomass]
     label_description: 
     label_task: regression
     label_name: BLM Forest Operations Inventory Vegetation
@@ -18,7 +24,56 @@ labels:
       type:
       url: 
 
-  dnr: 
+  BLM-LANE:
+    provider_name: Bureau of Land Management
+    provider_url: 
+    provider_roles: [licensor, producer, processor, host]
+    description: > 
+      The Northwest Oregon Bureau of Land Management (BLM) District engaged Hamer Environmental (Hamer) to create 240 field correlation 
+      plots in the Fall of 2017. These plots were intended for use in completing a comprehensive stand-level inventory based on LiDAR 
+      data collected within the Northwest Oregon BLM District, specifically in Lane County.
+
+      The tree data were measured for both small (11.77-foot radius) and large (41.6-foot radius) plots. Smaller plots, a subset of larger plots, 
+      were utilized to quantify smaller trees with a diameter at breast height (DBH) less than 5.5 inches. Larger plots included detailed tree 
+      measurements, such as species identification, DBH, total height, crown ratio, height to the base of the live crown, indications of tree 
+      lean or a broken top, distance from the plot center, and azimuth from the plot center for all trees present. Large plots also involved 
+      measurements of downed woody debris, including details on small and large end diameters, length, and decay class. Additionally, 
+      structural characteristics relevant to northern spotted owl habitat were documented for each of the 240 field correlation plots.
+
+      The data collection process was carried out between October 6, 2017, and February 1, 2018.
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_description: 
+    label_task: regression
+    label_name: BLM Forest Operations Inventory Vegetation
+    label_license: 
+      type:
+      url: 
+
+  BLM-ROGUE:
+    provider_name: Bureau of Land Management
+    provider_url: 
+    provider_roles: [licensor, producer, processor, host]
+    description: > 
+      The study area encompasses around 650,000 acres of land, comprising USDI Bureau of Land Management (BLM) and Oregon Department 
+      of Forestry (ODF) forests located in the southern Oregon Cascades. This area is part of a larger 1.4 million-acre region over 
+      which LIDAR data was collected in 2012. 
+
+      In the fall of 2013, tree measurements were collected on 240 plots across the study area, representing six tree height classes. 
+      The plot protocol employed a nested set of circular, fixed area plots to characterize all trees with a diameter at breast height (DBH) 
+      larger than 1 inch. The measurements taken for live and dead trees with a DBH greater than or equal to 6.5 inches included tree number, 
+      species, DBH, height, crown base height, and crown ratio. Additionally, within the tree plot, a smaller 1/100-acre plot was nested 
+      to collect information for saplings with a DBH less than 6.5 inches.
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_description: 
+    label_task: regression
+    label_name: BLM Forest Operations Inventory Vegetation
+    label_license: 
+      type:
+      url: 
+
+  WA-DNR: 
     provider_name: Washington Department of Natural Resources
     provider_url: https://gis.dnr.wa.gov/site2/rest/services/Public_Forest_Mgmt/WADNR_PUBLIC_RS_FRIS/MapServer
     provider_roles: [licensor, producer, processor, host]
@@ -32,12 +87,117 @@ labels:
       other attributes continue to report mid-2017 conditions.
     label_description: Predicted above ground live biomass. Units = metric tons / acre. 1 metric ton = 1000 kg.
     label_type: vector
-    label_properties: [BIOMASS_LIVE]
+    label_properties: [aboveground_biomass]
     label_task: regression
     label_name: WA DNR Remotely Sensed Forest Resource Inventory (RS-FRIS) 
     label_license: 
       type: propietary
-      url: https://gis.dnr.wa.gov/portal/home/item.html?id=563d71c13dc644fa9c9d0f73916c637f
+      url: 
+    # collection: RS_FRIS
+
+  USFS-BLUE-MOUNTAINS: 
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
+    # collection: RS_FRIS
+
+  USFS-FREMONT-WINEMA: 
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
+    # collection: RS_FRIS
+
+  USFS-GIFFORD-PINCHOT: 
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
+    # collection: RS_FRIS
+
+  USFS-MOUNT-BAKER-SNOQUALMIE:
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
+    # collection: RS_FRIS
+
+  USFS-ROGUE:
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
+    # collection: RS_FRIS
+
+  USFS-UMPQUA:
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
+    # collection: RS_FRIS
+
+  USFS-WENATCHEE:
+    provider_name: US Forest Service
+    provider_url: ''
+    provider_roles: [licensor, producer, processor, host]
+    description: ''
+    label_description: ''
+    label_type: vector
+    label_properties: [aboveground_biomass]
+    label_task: regression
+    label_name: '' 
+    label_license: 
+      type: propietary
+      url: 
     # collection: RS_FRIS
 
 items:
@@ -140,4 +300,17 @@ items:
       type: propietary
       url: https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC08_C02_T1_L2#terms-of-use
 
+  lidar:
+    description: > 
+      Lidar plots. 
+    providers:
+      Google:
+        name: Testing lidar plots
+        roles: [host]
+        api: ''
+        url: ''
+        # collection: projects/KalmanGFwork/GFLandsat_V1
+    license: 
+      type: various
+      url:
 # {"href": "https://developers.google.com/earth-engine/datasets/catalog/USDA_NAIP_DOQQ#terms-of-use", "rel": "license", "type": "text/html"}
