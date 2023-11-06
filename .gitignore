@@ -22,6 +22,11 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.log
+notebooks/*.png
+notebooks/*.json
+notebooks/*.laz
+notebooks/classified
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
