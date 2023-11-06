@@ -145,19 +145,24 @@ if __name__ == "__main__":
     run_as = "dev"
     conf = ConfigLoader(Path(__file__).parent.parent).load()
     api_url = conf['items']['landsat8']['providers']['Google']['api']
-    
+    GRID = Path(conf.GRID)
+    grid = gpd.read_file(GRID)
+
     if run_as == "dev":
         PLOTS = Path(conf.PLOTS)
         PROJDATADIR = Path(conf.DEV_DATADIR)
-        WORKERS = 4
+        WORKERS = 20
         # Load plots and naip file info
-        plots = gpd.read_file(PROJDATADIR / 'features/plot_features.geojson')
-        plots = plots.iloc[0:10]
+        plots = gpd.read_file(PROJDATADIR.parent / 'features/plot_features.geojson')
+        plots = plots.sort_values('uuid').iloc[:20]
     elif run_as == "prod":
         PLOTS = Path(conf.PLOTS)
         PROJDATADIR = Path(conf.DATADIR)
         WORKERS = 20
         plots = gpd.read_file(PROJDATADIR / 'features/plot_features.geojson')
+
+    ovly = grid.overlay(plots)
+    gdf = grid[grid.CELL_ID.isin(ovly['CELL_ID'].unique())]
 
     # Initialize the Earth Engine module.
     # Setup your Google Earth Engine API key before running this script.
@@ -165,15 +170,15 @@ if __name__ == "__main__":
     ee.Initialize(opt_url=api_url)
 
     # Overwrite years if needed
-    years = [2014]#, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+    years = [2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
 
     for year in years:
 
-        out_path = create_directory_tree(PROJDATADIR, 'landsat8', str(year))
+        out_path = create_directory_tree(PROJDATADIR, 'interim', 'landsat8', str(year))
 
         params = [
             {
-                "bbox": bbox_padding(row.geometry.centroid), #row.geometry.bounds, 
+                "bbox": bbox_padding(row.geometry.centroid, padding=90), #row.geometry.bounds, 
                 "year": year,
                 "out_path": out_path,
                 "prefix": f"{row.uuid}_{year}_{row.source}",
