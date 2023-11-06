@@ -35,6 +35,30 @@ from gdstools import (
     infer_utm
 )
 
+
+def bbox_padding(geom:object, padding:int=1e3):
+    """
+    Add padding to a bounding box.
+
+    :param geom: shapely.geometry.Polygon
+        The geometry to add padding to.
+    :type geom: shapely.geometry.Polygon
+    :param padding: float, optional
+        The amount of padding to add to the geometry, in meters. Default is 1000.
+    :type padding: float
+
+    :return: tuple
+        A tuple of four floats representing the padded bounding box coordinates (minx, miny, maxx, maxy).
+    :rtype: tuple
+    """
+    p_crs = infer_utm(geom.bounds)
+    p_geom = gpd.GeoSeries(geom, crs=4326).to_crs(p_crs)
+    if padding > 0:
+        p_geom = p_geom.buffer(padding, join_style=2)
+
+    return p_geom.to_crs(4326)
+
+
 def dem_from_tnm(bbox, res=10, crs=4326, **kwargs):
     """
     Retrieve a Digital Elevation Model (DEM) image from The National Map (TNM)
@@ -631,7 +655,7 @@ def fetch_dems(
         # so we can calculate topographic metrics. This is to avoid
         # distortions due to the curvature of the earth.
         # See discussion https://gis.stackexchange.com/q/7906/72937
-        p_crs = infer_utm(geom.bounds)
+        p_crs = infer_utm(*geom.bounds.values.tolist())
         p_geom = gpd.GeoSeries(geom, crs=4326).to_crs(p_crs)
 
         if padding > 0:
@@ -760,7 +784,7 @@ def fetch_dems(
 # %%
 if __name__ == '__main__':
 
-    run_as = 'prod'
+    run_as = 'dev'
     res = 1
     # Load config file
     conf = ConfigLoader(Path(__file__).parent.parent).load()
@@ -769,25 +793,25 @@ if __name__ == '__main__':
         PLOTS = Path(conf.DEV_PLOTS)
         DATADIR = Path(conf.DEV_DATADIR)
         gdf = gpd.read_file(PLOTS)
-        gdf = gdf[gdf.uuid.isin(gdf.uuid[:100])]
+        gdf = gdf.sort_values('uuid').iloc[:20] #[gdf.uuid.isin(gdf.uuid[:100])]
     else:
         PLOTS = conf.DEV_PLOTS
         DATADIR = Path(conf.DATADIR)
         gdf = gpd.read_file(PLOTS)
     
-    out_path = DATADIR / '3dep'
+    out_path = DATADIR / 'interim' / '3dep'
     out_path.mkdir(exist_ok=True, parents=True)
 
     params = [
         {
             'cell_id': row.uuid,
-            'geom': row.geometry,
+            'geom': bbox_padding(row.geometry.centroid, 90),
             'state': row.agency,
             'padding': 0,
             'out_dir': out_path,
             'suffix': '',
             'res': res,
-            'overwrite': False
+            'overwrite': True
         } for row in gdf.itertuples()
     ]
 
