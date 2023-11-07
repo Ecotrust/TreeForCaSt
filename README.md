@@ -1,7 +1,7 @@
 fbstac_plots
 ==============================
 
-Oregon and Washington State forest plots, attributes, and imagery for forest benchmarking and modeling.
+Oregon and Washington State forest plots, attributes, and imagery STAC for forest benchmarking and modeling.
 
 Project Organization
 ------------
@@ -13,15 +13,13 @@ Project Organization
     │   ├── interim        <- Intermediate data that has been transformed.
     │   ├── processed      <- The final, canonical data sets for modeling.
     │   └── raw            <- The original, immutable data dump.
-    │
+    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
     ├── notebooks          <- Jupyter notebooks for tutorials and exploratory analysis.
-    │
     ├── environment.yml    <- Python dependencies for this project.
-    │
     ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
     └── src                <- Source code for use in this project.
-        │
-        └── datafactory    <- Scripts to download or generate data
+        ├── datafactory    <- Scripts to download or generate data
+        └── build_stac.py  <- Script to build STAC catalog from data
 
 --------
 
