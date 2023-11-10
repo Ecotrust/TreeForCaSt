@@ -53,7 +53,7 @@ from pystac import (
 )
 from pystac.extensions.eo import Band, EOExtension
 from pystac.extensions.label import LabelExtension, LabelType, LabelClasses
-from pystac.extensions.projection import ProjectionExtension
+from pystac.extensions.projection import ProjectionExtension, AssetProjectionExtension
 from pystac.extensions.pointcloud import PointcloudExtension, Schema, Statistic
 
 import pandas as pd
@@ -176,7 +176,7 @@ def create_pc_item(
         date = datetime.datetime(int(year), 1, 1) + datetime.timedelta(int(day) - 1 if int(day) > 1 else int(day))
         return date#.isoformat()+'Z'
 
-    def convertGeometry(geom, srs):
+    def convertGeometry(geom, srs, crs):
         from osgeo import ogr
         from osgeo import osr
         in_ref = osr.SpatialReference()
@@ -193,10 +193,10 @@ def create_pc_item(
         output = []
         output.append(float(obj['minx']))
         output.append(float(obj['miny']))
-        output.append(float(obj['minz']))
+        # output.append(float(obj['minz']))
         output.append(float(obj['maxx']))
         output.append(float(obj['maxy']))
-        output.append(float(obj['maxz']))
+        # output.append(float(obj['maxz']))
         return output
 
     filepath = Path(filepath)
@@ -219,29 +219,52 @@ def create_pc_item(
     pc_id = filepath.name.replace('.laz', '')
     crs = CRS.from_epsg(4326)
     asset_crs = CRS.from_string(copc['spatialreference'])
+    asset_bbox = convertBBox(stats['bbox']['native']['bbox']) 
+    # asset_geom = boundary['boundary_json'] 
+
+    # Item footprint in epsg:4326
+    try:
+        geom = stats['bbox']['EPSG:4326']
+        bbox = convertBBox(geom['bbox'])
+        # boundary = geom['boundary']
+    except KeyError:
+        logging.warning(f'Using native bbox.')
+        geom = stats['bbox']['native']
+        bbox = convertBBox(geom['bbox'])      
 
     # try:
-    #     geom = convertBBox(stats['bbox'][crs])
-    # except KeyError:
-    #     logging.warning(f'No bbox found for {pc_id}. Using native bbox.')
-    geom = stats['bbox']['native']
-    bbox = convertBBox(geom['bbox'])
-
-    try:
-        pc_date = capture_date(copc)
-    except ValueError:
-        logging.warning(f'No date found for {pc_id}. Using year from filename.')
-        year = int(Path(filepath).stem.split('_')[1])
-        pc_date = datetime.datetime(int(year), 1, 1)
+    #     pc_date = capture_date(copc)
+    # except ValueError:
+    # logging.warning(f'No date found for {pc_id}. Using year from filename.')
+    year = int(Path(filepath).stem.split('_')[1])
+    day = copc['creation_doy']
+    pc_date = datetime.datetime(int(year), 1, day or 1)
     
     try:
         pc_geom = convertGeometry(
             boundary['boundary_json'],
-            copc['comp_spatialreference']
+            copc['comp_spatialreference'],
+            crs
+        )
+        asset_geom = convertGeometry(
+            boundary['boundary_json'],
+            copc['comp_spatialreference'],
+            asset_crs
         )
     except KeyError:
         logging.warning(f'No geometry found for {pc_id}. Using bbox.')
-        pc_geom = geom['boundary']   
+        pc_geom = {
+            'type': 'Polygon',
+            'coordinates': [
+                list(geometry.box(*bbox, crs=crs, ccw=True).exterior.coords)
+            ]
+        } 
+        asset_geom = {
+            'type': 'Polygon',
+            'coordinates': [
+                list(geometry.box(*asset_bbox, crs=asset_crs, ccw=True).exterior.coords)
+            ]
+        }   
 
     density = boundary.get('avg_pt_per_sq_unit', 0)
     schemas = [Schema(x) for x in info['schema']['dimensions']]
@@ -266,15 +289,30 @@ def create_pc_item(
     )
 
     proj = ProjectionExtension.ext(item, add_if_missing=True)
-    proj.apply(epsg=crs.to_epsg())
+    proj.apply(epsg=4326)
 
     asset = Asset(href=asset_path_url + filepath.name)
     item.add_asset('feature', asset)
+    asset_ext = AssetProjectionExtension.ext(item.assets['feature'])
+    asset_ext.epsg = asset_crs.to_epsg()
+    asset_ext.bbox = asset_bbox
+    asset_ext.geometry = asset_geom
 
     crown_shp = filepath.parent / f'{filepath.stem}.geojson'
     if os.path.exists(crown_shp):
+        crown = gpd.read_file(crown_shp)
+        coords = json.loads(crown.geometry.to_json())
+        all_coords = [coords['features'][i]['geometry']['coordinates'] 
+                      for i in range(len(coords['features']))]
         shp_asset = Asset(href=asset_path_url + crown_shp.name)
-        item.add_asset('crown', shp_asset)
+        item.add_asset('crowns', shp_asset)
+        asset_ext = AssetProjectionExtension.ext(item.assets['crowns'])
+        asset_ext.epsg = crown.crs.to_epsg()
+        asset_ext.bbox = crown.total_bounds.tolist()
+        asset_ext.geometry = {
+            'type': 'MultiPolygon',
+            'coordinates': all_coords
+        }
 
     return item
 
@@ -311,6 +349,17 @@ def create_image_item(
         # if image_path.name.endswith('Rast-cog.tif'):
         #     print('CHM')
 
+    # Item footprint in epsg:4326
+    geom = gpd.GeoSeries(
+        geometry.box(*bbox, ccw=True), crs=crs).to_crs('EPSG:4326')
+    item_bbox = list(geom.bounds.iloc[0])
+    item_geom = {
+        'type': 'Polygon',
+        'coordinates': [
+            list(geometry.box(*item_bbox, ccw=True).exterior.coords)
+        ]
+    } 
+
     # Load metadata
     if metadata_path:
         with open(metadata_path) as f:
@@ -343,8 +392,8 @@ def create_image_item(
     # Create item
     item = Item(
         id=image_id,
-        geometry=image_geom,
-        bbox=bbox,
+        geometry=item_geom,
+        bbox=item_bbox,
         datetime=image_date,
         properties={},
     )
@@ -356,19 +405,31 @@ def create_image_item(
     eo.apply(bands=bands)
 
     proj = ProjectionExtension.ext(item, add_if_missing=True)
-    proj.apply(epsg=crs.to_epsg())
-    proj.apply(transform=transform, epsg=crs.to_epsg(), shape=shape)
+    proj.apply(epsg=4326)
+    # proj.apply(transform=transform, epsg=crs.to_epsg(), shape=shape)
 
     # Add links to assets
     item.add_asset('image', Asset(href=asset_path_url +
                    image_path.name, media_type=MediaType.COG))
     # item.add_asset('metadata', pystac.Asset(href=github_url +
     #                metadata_path[3:], media_type=pystac.MediaType.JSON))
+    asset_ext = AssetProjectionExtension.ext(item.assets['image'])
+    asset_ext.epsg = crs.to_epsg()
+    asset_ext.bbox = bbox
+    asset_ext.geometry = image_geom
+    asset_ext.shape = shape
+    asset_ext.transform = transform
 
     if thumb_path:
         thumb_path = Path(thumb_path)
         item.add_asset('thumbnail', Asset(href=asset_path_url +
                     thumb_path.name, media_type=MediaType.PNG))
+        thumb_ext = AssetProjectionExtension.ext(item.assets['thumbnail'])
+        thumb_ext.epsg = crs.to_epsg()
+        thumb_ext.bbox = bbox
+        thumb_ext.geometry = image_geom
+        thumb_ext.shape = shape
+        thumb_ext.transform = transform
 
     return item
 
@@ -518,7 +579,7 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
             file_extension = image_path.suffix
             idx = image_path.as_posix().split('/').index(collection.id)
             subdir = '/'.join(image_path.as_posix().split('/')[idx:-1])
-            asset_path_url = 'https://fbstac-stands.s3.amazonaws.com/data/' + subdir + '/'
+            asset_path_url = 'https://fbstac-stands.s3.amazonaws.com/plots/data/' + subdir + '/'
 
             if file_extension == '.laz':
                 item = create_pc_item(image_path, 'EPSG:4326', asset_path_url)
@@ -555,6 +616,9 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
         if dataset_paths:
             print(f'{len(dataset_paths)} new items will be added to {dataset}')
             logging.info(f'Adding items for collection {dataset}')
+
+            # if dataset == 'usfs-blue-mountains-plots':
+            #     print('Adding lidar items')
 
             params = [
                 {
@@ -627,18 +691,21 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
             for k in images_dict.keys():
                 collection = fbench.get_child(k)
 
+                # if collection.id == 'lidar':
+                #     print('LIDAR')
+
                 sel_items = []
                 if isinstance(images_dict[k], dict):
                     _years = sorted([int(y) for y in images_dict[k].keys() if abs(int(y)-year) <= 2])
 
                     if _years:
                         sel_items = [item for item in collection.get_items() if item.id.split('_')[0] == label_uuid]
+                        # if '00027724_2015_USFS-BLUE-MOUNTAINS_PC-Crowns' in [item.id for item in sel_items]:
+                        #     break
                         sel_items = [item for item in sel_items if item.datetime.year in _years]
                         if sel_items:
                             _year = min([item.datetime.year for item in sel_items], key=lambda x: abs(x-year))
                             sel_items = [item for item in sel_items if item.datetime.year == _year]
-                            # if '008dc9d1_2016_wa-western' in [item.id for item in sel_items]:
-                            #     break
                         
                         del _years
 
