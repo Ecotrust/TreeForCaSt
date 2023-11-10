@@ -32,6 +32,7 @@ Name convention
 
 # %%
 import re
+import os
 import logging
 import json
 import datetime
@@ -59,6 +60,7 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 import rasterio
+from rasterio.crs import CRS
 import pdal
 from shapely import geometry
 
@@ -97,8 +99,17 @@ def create_label_item(
     # Read label data
     # label_path = Path(label_path)
     # label_data = gpd.read_file(label_path)
-    label_id = f'{row.uuid}_{row.year}_{row.source.lower()}-label'
+    # if crs is None:
+    #     crs = f'EPSG:{row.epsg}'
+
+    # if crs == 'EPSG:4326':
     bbox = list(row.geometry.bounds)
+    geom = row.geometry
+    # else:
+    #     bbox = [row.utm_xmin, row.utm_ymin, row.utm_xmax, row.utm_ymax]
+    #     geom = geometry.box(*bbox, ccw=True)
+    
+    label_id = f'{row.uuid}_{row.year}_{row.source.lower()}-label'
     label_date = datetime.datetime(int(row.year), 1, 1)
 
     if attr_dict['label_task'] in ['classification', 'segmentation']:
@@ -109,7 +120,7 @@ def create_label_item(
     else:
         label_classes = None
 
-    label_data = gpd.GeoSeries(row.geometry, crs=crs)
+    label_data = gpd.GeoSeries(geom, crs=crs)
     label_data = json.loads(label_data.to_json())
     label_data['features'][0]['properties'] = row[2:-2].to_dict()
 
@@ -171,7 +182,7 @@ def create_pc_item(
         in_ref = osr.SpatialReference()
         in_ref.SetFromUserInput(srs)
         out_ref = osr.SpatialReference()
-        out_ref.SetFromUserInput(crs)
+        out_ref.SetFromUserInput(f'EPSG:{crs.to_epsg()}')
 
         g = ogr.CreateGeometryFromJson(json.dumps(geom))
         g.AssignSpatialReference(in_ref)
@@ -206,14 +217,15 @@ def create_pc_item(
     copc = pipeline.metadata['metadata'][r.type]
 
     pc_id = filepath.name.replace('.laz', '')
+    crs = CRS.from_epsg(4326)
+    asset_crs = CRS.from_string(copc['spatialreference'])
 
-    try:
-        geom = convertBBox(stats['bbox'][crs])
-    except KeyError:
-        logging.warning(f'No bbox found for {pc_id}. Using native bbox.')
-        geom = stats['bbox']['native']
-
-    bbox = geom['bbox']
+    # try:
+    #     geom = convertBBox(stats['bbox'][crs])
+    # except KeyError:
+    #     logging.warning(f'No bbox found for {pc_id}. Using native bbox.')
+    geom = stats['bbox']['native']
+    bbox = convertBBox(geom['bbox'])
 
     try:
         pc_date = capture_date(copc)
@@ -254,19 +266,24 @@ def create_pc_item(
     )
 
     proj = ProjectionExtension.ext(item, add_if_missing=True)
-    proj.apply(epsg=crs)
+    proj.apply(epsg=crs.to_epsg())
 
     asset = Asset(href=asset_path_url + filepath.name)
     item.add_asset('feature', asset)
+
+    crown_shp = filepath.parent / f'{filepath.stem}.geojson'
+    if os.path.exists(crown_shp):
+        shp_asset = Asset(href=asset_path_url + crown_shp.name)
+        item.add_asset('crown', shp_asset)
 
     return item
 
 
 def create_image_item(
     image_path: str,
-    thumb_path: str,
-    metadata_path: str,
     asset_path_url: str,
+    thumb_path: str=None,
+    metadata_path: str=None,
 ):
     """
     Create a STAC item.
@@ -285,24 +302,43 @@ def create_image_item(
     """
     # Load image data
     image_path = Path(image_path)
-    thumb_path = Path(thumb_path)
     with rasterio.open(image_path) as src:
         crs = src.crs
         transform = src.transform
         shape = src.shape
         bbox = list(src.bounds)
+        description = src.descriptions
+        # if image_path.name.endswith('Rast-cog.tif'):
+        #     print('CHM')
 
     # Load metadata
-    with open(metadata_path) as f:
-        metadata = json.load(f)
-
-    # Collect image properties
-    image_date = datetime.datetime.utcfromtimestamp(
-        metadata['properties']['system:time_start']/1000)
+    if metadata_path:
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        image_date = datetime.datetime.utcfromtimestamp(
+            metadata['properties']['system:time_start']/1000)
+        image_bands = metadata['bands']
+    else:
+        year = image_path.stem.split('_')[1]
+        image_date = datetime.datetime(int(year), 1, 1)
+        if description[0]:
+            image_bands = [
+                {
+                    'id': ''.join([w[0] for w in b.split(' ')]),
+                    'name': b
+                }
+                for b in description
+            ]
+        else:
+            image_bands = [
+                    {
+                        'id': 'Band1',
+                        'name': 'Band1'
+                    }
+            ]
+    
     image_id = image_path.stem.replace('-cog', '')
-
     image_geom = bbox_to_json(bbox)
-    image_bands = metadata['bands']
 
     # Create item
     item = Item(
@@ -328,8 +364,11 @@ def create_image_item(
                    image_path.name, media_type=MediaType.COG))
     # item.add_asset('metadata', pystac.Asset(href=github_url +
     #                metadata_path[3:], media_type=pystac.MediaType.JSON))
-    item.add_asset('thumbnail', Asset(href=asset_path_url +
-                   thumb_path.name, media_type=MediaType.PNG))
+
+    if thumb_path:
+        thumb_path = Path(thumb_path)
+        item.add_asset('thumbnail', Asset(href=asset_path_url +
+                    thumb_path.name, media_type=MediaType.PNG))
 
     return item
 
@@ -371,16 +410,20 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
     :rtype: Catalog
     """
     # Load config file
+    # run_as = 'dev'
+    
     logging.info('Loading config file')
     conf = ConfigLoader(rootpath).load()
     if run_as == 'dev':
         PLOTS = Path(conf.DEV_PLOTS)
         DATADIR = Path(conf.DEV_DATADIR)
         PLOTATTRS = Path(conf.DEV_PLOTATTRS)
+        idx = 8
     else:
         PLOTS = conf.DEV_PLOTS
         DATADIR = Path(conf.DATADIR)
         PLOTATTRS = Path(conf.PLOTATTRS)
+        idx = 6
 
     logging.info('Running build_stac.py as %s', run_as)
     logging.info('Reading plot shapefile from %s', PLOTS)
@@ -393,19 +436,19 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
     # Build catalog
     fbench = Catalog(
         id='fbstac-plots',
-        description='A STAC implementation for forest benchmarking and modeling',
-        title='Forest Benchmarking and Modeling STAC',
+        description='Oregon and Washington State forest plots, attributes, and imagery STAC for forest benchmarking and modeling.',
+        title='Forest plots STAC for benchmarking and modeling.',
     )
 
     today = datetime.datetime.today()
     datasets = image_collection(DATADIR) + image_collection(DATADIR, file_pattern='*.laz')
-    images_dict = paths_to_dict(datasets, 6)
+    images_dict = paths_to_dict(datasets, idx)
     attrs = pd.read_csv(PLOTATTRS)
     attrs = attrs[attrs.year <= today.year]
 
     # Drop tree species columns
     attrs.drop(attrs.columns[18:], axis=1, inplace=True)
-    merged = attrs.merge(plots_shp[['uuid', 'source', 'geometry']], on='uuid')
+    merged = attrs.merge(plots_shp, on='uuid')
     merged = gpd.GeoDataFrame(merged, crs=plots_shp.crs, geometry=merged.geometry)
 
     if run_as == 'dev':
@@ -427,14 +470,19 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
         dts_info = conf['items'][dataset]
 
         logging.info('Generating collection %s', dataset)
-        providers = [
-            Provider(
-                name=p.get('name', None), 
-                roles=[p.get('roles', None)], 
-                url=p.get('url', None)
-            )
-            for p in dts_info['providers'].values()
-        ]
+        
+        if dts_info.get('providers'):
+            providers = [
+                Provider(
+                    name=p.get('name', None), 
+                    roles=[p.get('roles', None)], 
+                    url=p.get('url', None)
+                )
+                for p in dts_info['providers'].values()
+            ]
+        else:
+            providers = None
+
         fbench_collection = Collection(
             id = f'{dataset}',
             description = dts_info['description'],
@@ -465,48 +513,34 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
             logging.info(f'Dataset {dataset} contain {len(images_dict[dataset])} images.')
             dataset_paths = images_dict[dataset]
 
-    # def nearest_matching_paths(_dict, uuids, year, max_year_distance=2):
-    #     _year = sorted([y for y in _dict.keys() if abs(int(y)-year) <= max_year_distance])
-        
-    #     if _year:
-    #         return [p for p in _dict.get(_year[0]) if Path(p).name.split('_')[0] in uuids]
-    #     else:
-    #         return []
-
-    # for survey, year in merged[['year', 'source']].groupby(
-    #     ['source','year']).count().index.tolist():
-
-    #     # Create and add items to collections
-    #     # Create label collection
-    #     uuids = merged.uuid[
-    #         (merged.source == survey) & (merged.year == year)
-    #     ].tolist()
-        
-    # for dataset in images_dict.keys():
-    #     if isinstance(images_dict[dataset], dict):
-    #         dataset_paths = nearest_matching_paths(images_dict[dataset], uuids, year)
-    #         # print('\nAdding items to collection', dataset)
-    #     else:
-    #         dataset_paths = [p for p in images_dict[dataset] if Path(p).name.split('_')[0] in uuids]
-
         def add_item(image_path, collection):
-            file_extension = Path(image_path).suffix
-            idx = image_path.split('/').index(collection.id)
-            subdir = '/'.join(image_path.split('/')[idx:-1])
+            image_path = Path(image_path)
+            file_extension = image_path.suffix
+            idx = image_path.as_posix().split('/').index(collection.id)
+            subdir = '/'.join(image_path.as_posix().split('/')[idx:-1])
             asset_path_url = 'https://fbstac-stands.s3.amazonaws.com/data/' + subdir + '/'
 
             if file_extension == '.laz':
                 item = create_pc_item(image_path, 'EPSG:4326', asset_path_url)
+
             elif file_extension == '.tif':
-                thumbnail_path = image_path.replace('-cog.tif', '-preview.png')
-                metadata_path = image_path.replace(
-                    '-cog.tif', '-metadata.json')
+                suffix = '-cog.tif' if image_path.stem.endswith('-cog') else '.tif'
+
+                thumbnail_path = image_path.as_posix().replace(suffix, '-preview.png')
+                if not os.path.exists(thumbnail_path):
+                    thumbnail_path = None
+
+                metadata_path = image_path.as_posix().replace(suffix, '-metadata.json')
+                if not os.path.exists(metadata_path):
+                    metadata_path = None
+
                 item = create_image_item(
                     image_path, 
+                    asset_path_url,
                     thumbnail_path, 
-                    metadata_path, 
-                    asset_path_url
+                    metadata_path 
                 )
+
             else:
                 raise ValueError(f'File extension {file_extension} not supported.')
             
@@ -603,8 +637,8 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
                         if sel_items:
                             _year = min([item.datetime.year for item in sel_items], key=lambda x: abs(x-year))
                             sel_items = [item for item in sel_items if item.datetime.year == _year]
-                            if '008dc9d1_2016_wa-western' in [item.id for item in sel_items]:
-                                break
+                            # if '008dc9d1_2016_wa-western' in [item.id for item in sel_items]:
+                            #     break
                         
                         del _years
 
