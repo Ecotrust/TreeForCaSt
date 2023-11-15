@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import logging
+
 import pdal
 import geopandas as gpd
 import pandas as pd
@@ -7,11 +9,18 @@ import numpy as np
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon 
 
-from gdstools import image_collection, multithreaded_execution
+from gdstools import image_collection, multithreaded_execution, ConfigLoader
 
-def classify(infile, outfile, to_epsg):
+logging.basicConfig(filename='process_lidar.log', encoding='utf-8', filemode='w', 
+                    level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
+
+def classify(infile, outfile, to_epsg, overwrite=False):
     # out_base = os.path.basename(infile)
     # outfile = os.path.join(out_dir, out_name)
+
+    if os.path.exists(outfile) and not overwrite:
+        logging.info(f"{Path(outfile).name} already exists, skipping")
+        return
     
     reader = pdal.Reader.las(infile)
     reproject = pdal.Filter.reprojection(out_srs=f"EPSG:{to_epsg}")
@@ -29,11 +38,22 @@ def classify(infile, outfile, to_epsg):
     )
 
     pipeline = reader | blank | outlier | elm | smrf | hag | writer
-    pipeline.execute()
+
+    try:
+        pipeline.execute()
+    except RuntimeError as e:
+        logging.warning(f"Error processing {Path(infile).name}: {e}")
+        return
 
     return outfile
 
-def make_rasters(infile, prefix, bbox, resolution=0.5):
+def make_rasters(infile, prefix, bbox, resolution=0.5, overwrite=False):
+    """Generate DTM, CHM, and Intensity rasters from a laz file.
+    """
+    if not os.path.exists(infile):
+        logging.info( f"{Path(infile).name} does not exist, skipping")
+        return
+
     USEFUL = "Classification[0:6],Classification[8:17]"
     # out_base = os.path.basename(infile).split(".")[0]
     reader = pdal.Reader.las(
@@ -48,8 +68,15 @@ def make_rasters(infile, prefix, bbox, resolution=0.5):
 
     rng = pdal.Filter.range(limits=USEFUL)
     
+    dtm_outfile = os.path.join(parent_dir, f'{prefix}-DTM.tif')
+    chm_outfile = os.path.join(parent_dir, f'{prefix}-CHM.tif')
+    inten_outfile = os.path.join(parent_dir, f'{prefix}-Intensity.tif')
+    if (os.path.exists(dtm_outfile) & os.path.exists(chm_outfile) & os.path.exists(inten_outfile)) and not overwrite:
+        logging.info(f"Rasters for {Path(infile).name} already exists, skipping")
+        return
+
     dtm = pdal.Writer.gdal(
-        os.path.join(parent_dir, f'{prefix}-DTM.tif'),
+        dtm_outfile,
         resolution=resolution,
         bounds=bounds,
         dimension="Z",
@@ -60,7 +87,7 @@ def make_rasters(infile, prefix, bbox, resolution=0.5):
     )
 
     chm = pdal.Writer.gdal(
-        os.path.join(parent_dir, f'{prefix}-CHM.tif'),
+        chm_outfile,
         resolution=resolution,
         bounds=bounds,
         dimension="HeightAboveGround",
@@ -75,7 +102,7 @@ def make_rasters(infile, prefix, bbox, resolution=0.5):
           "Intensity = Intensity / 256"
       ])
     intensity = pdal.Writer.gdal(
-        os.path.join(parent_dir, f'{prefix}-Intensity.tif'),
+        inten_outfile,
         resolution=resolution,
         bounds=bounds,
         dimension="Intensity",
@@ -232,7 +259,7 @@ def treeseg(infile, prefix, to_epsg, overwrite=False):
     arr = pipeline.arrays[0]
     srs = pipeline.srswkt2
     crowns = get_crowns(arr, srs)
-    crowns.to_file(outfile, driver='GeoJSON')
+    crowns.to_epsg(to_epsg).to_file(outfile, driver='GeoJSON')
     print(f"Saved {len(crowns)} crowns to {outfile}")
     
     return outfile
@@ -240,18 +267,28 @@ def treeseg(infile, prefix, to_epsg, overwrite=False):
 
 if __name__ == "__main__":
 
-    PLOTS = 'data/dev/features/plot_features.geojson'
-    OUTLIERS = 'data/dev/features/outlier_uuids.csv'
+    run_as = 'prod'
+    
+    # Load config file
+    conf = ConfigLoader(Path(__file__).parent.parent).load()
+    PLOTS = conf.PLOTS
+    plots = gpd.read_file(PLOTS).set_index('uuid')
+
+    if run_as == 'dev':
+        DATADIR = Path(conf.DEV_DATADIR).parent
+        plots = plots.sort_index().iloc[0:20]
+        
+    else:
+        DATADIR = Path(conf.DATADIR)
+
     LAZDIR = '/mnt/data/FESDataRepo/remote_sensing_plots/interim/lidar/' + \
             'accepted_plot_clips/**/hectare_clips/'
     
-    plots = gpd.read_file(PLOTS).set_index('uuid')
-    outliers = pd.read_csv(OUTLIERS)
-    outliers['uuid'] = outliers.outlier_uuid.apply(lambda x: x.split('-')[0])
-    outliers = outliers.set_index('uuid')
+    # outliers = pd.read_csv(OUTLIERS)
+    # outliers['uuid'] = outliers.outlier_uuid.apply(lambda x: x.split('-')[0])
+    # outliers = outliers.set_index('uuid')
 
-    splots = plots[~plots.index.isin(outliers.index)]
-    splots = splots.sort_index().iloc[0:20]
+    # splots = plots[~plots.index.isin(outliers.index)]
 
     laz_files = image_collection(LAZDIR, file_pattern="*.laz")
     uuid_path = [
@@ -264,27 +301,29 @@ if __name__ == "__main__":
     ]
     df = pd.DataFrame(uuid_path).set_index('uuid')
 
-    splots = df.merge(splots, left_index=True, right_index=True)
+    splots = df.merge(plots, left_index=True, right_index=True)
     splots['outfile'] = splots.apply(
-        lambda row: f'data/dev/processed/lidar/{row.year}/{row.name}_{row.year}_{row.source}_PC.laz', axis=1)
+        lambda row: DATADIR / f'interim/lidar-derived/{row.year}/{row.name}_{row.year}_{row.source}_PC.laz', axis=1)
 
     params = [
         {
             "infile" : row.path,
-            "outfile" : row.outfile,
+            "outfile" : row.outfile.as_posix(),
             "to_epsg" : row.epsg,
+            "overwrite" : False,
         }
         for idx, row in splots.iterrows()
     ]
 
-    # multithreaded_execution(classify, params, threads=10)
+    # multithreaded_execution(classify, params)
 
     # Generate rasters
     params = [
         {
-            "infile" : row.outfile,
+            "infile" : row.outfile.as_posix(),
             "prefix" : Path(row.outfile).stem,
             "bbox" : [row.utm_xmin, row.utm_ymin, row.utm_xmax, row.utm_ymax],
+            "overwrite" : False,
             # "resolution" : 0.5,
         }
         for idx, row in splots.iterrows()
@@ -294,13 +333,15 @@ if __name__ == "__main__":
 
     params = [
         {
-            "infile" : row.outfile,
+            "infile" : row.outfile.as_posix(),
             "prefix" : Path(row.outfile).stem,
             "to_epsg" : row.epsg,
+            "overwrite" : False,
             # "resolution" : 0.5,
         }
         for idx, row in splots.iterrows()
     ]
+
     multithreaded_execution(treeseg, params, threads=10)
     # for param in params:
     #     treeseg(**param)
