@@ -1,8 +1,7 @@
 """
-Build the STAC catalog for Oregon BLM and Washington St DNR forest stands. 
+Build STAC catalog for BLM, Washington DNR, and US Forest Service Forest Plots. 
 
 Label collections. One per agency-survey comb.
-
      1. BLM - Coos Bay
      2. BLM - Rogue Valley
      3. BLM - Lane County
@@ -22,12 +21,6 @@ Data collections
     3. Landsat 8
     4. LIDAR
     5. Attribute data
-
-Name convention
-    labels: <uuid>_<year>_<agency-survey>-label
-    datasets: 
-        - <uuid>_<year>_<agency-survey>_<dataset>-cog
-        - <uuid>_<year>_<agency-survey>_<dataset>-preview
 """
 
 # %%
