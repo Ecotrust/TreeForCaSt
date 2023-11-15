@@ -1,34 +1,41 @@
 labels:
   BLM-COOS:
-    provider_name: Bureau of Land Management
+    provider_name: Bureau of Land Management (BLM)
     provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: > 
+    description: |
       Forest plots from the Coos Bay Bureau of Land Management (BLM) and Coquille tribal forests lidar area. The study area encompasses approximately 
       250,000 acres of land located within the southern coastal forests of Oregon. This region is part of a larger 1.6 million-acre 
       expanse where LIDAR data was systematically gathered. The LIDAR data acquisition was facilitated through the Oregon LIDAR Consortium, 
       focusing on the Oregon South Coast region and spanning from April 2008 to April 2009. LIDAR was acquired at an average of 8 pulses 
       per square meter. 
 
+
       Tree measurements were conducted on a total of 899 plots, representing 6 tree height classes, within the study area during the years 
       2010 and 2011. 
+
+
+      Additional resources:
+      - [Plot Survey Sampling Protocol](https://fbstac-stands.s3.amazonaws.com/plots/documents/BLM_CoosBay_LIDAR_AssistedInventory_FinalReport_2015.pdf)
+      - [Plot Survey Raw database](https://fbstac-stands.s3.amazonaws.com/plots/raw/blm/BLM_Coos+Bay_Lidar_2011_08_02_Database.sqlite)
     label_type: vector
     label_properties: [aboveground_biomass]
     label_description: 
     label_task: regression
     label_name: BLM Forest Operations Inventory Vegetation
+    label_links: 
     label_license: 
       type:
       url: 
 
   BLM-LANE:
-    provider_name: Bureau of Land Management
+    provider_name: Bureau of Land Management (BLM)
     provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: > 
-      Forest plots from the Lane County Bureau of Land Management (BLM) forests lidar area. The Northwest Oregon BLM District engaged 
-      Hamer Environmental (Hamer) to create 240 field correlation plots in the Fall of 2017. These plots were intended for use in 
+    description: | 
+      Forest plots from the Lane County Bureau of Land Management (BLM) forests lidar area. These plots were intended for use in 
       completing a comprehensive stand-level inventory based on LiDAR data collected within the Northwest Oregon BLM District, specifically in Lane County.
+
 
       The tree data were measured for both small (11.77-foot radius) and large (41.6-foot radius) plots. Smaller plots, a subset of larger plots, 
       were utilized to quantify smaller trees with a diameter at breast height (DBH) less than 5.5 inches. Larger plots included detailed tree 
@@ -37,7 +44,13 @@ labels:
       measurements of downed woody debris, including details on small and large end diameters, length, and decay class. Additionally, 
       structural characteristics relevant to northern spotted owl habitat were documented for each of the 240 field correlation plots.
 
+
       The data collection process was carried out between October 6, 2017, and February 1, 2018.
+
+
+      Additional resources:
+      - [Plot Survey Final Report](https://fbstac-stands.s3.amazonaws.com/plots/documents/BLM_LaneCounty_LIDAR_Correlation_PlotProject_FinalReport_HamerEnvironmental.pdf)
+      - [Plot Survey Raw database](https://fbstac-stands.s3.amazonaws.com/plots/raw/blm/BLM_Lane+County_LiDAR_Combined_Batches_1_12_Final_2018_05_22_UW.sqlite)
     label_type: vector
     label_properties: [aboveground_biomass]
     label_description: 
@@ -48,19 +61,25 @@ labels:
       url: 
 
   BLM-ROGUE:
-    provider_name: Bureau of Land Management
+    provider_name: Bureau of Land Management (BLM)
     provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: > 
+    description: | 
       Forest plots from Rogue Valley Bureau of Land Management (BLM) forests lidar area. The study area encompasses around 650,000 acres of land, 
       comprising USDI Bureau of Land Management (BLM) and Oregon Department of Forestry (ODF) forests located in the southern Oregon Cascades. 
       This area is part of a larger 1.4 million-acre region over which LIDAR data was collected in 2012. 
+
 
       In the fall of 2013, tree measurements were collected on 240 plots across the study area, representing six tree height classes. 
       The plot protocol employed a nested set of circular, fixed area plots to characterize all trees with a diameter at breast height (DBH) 
       larger than 1 inch. The measurements taken for live and dead trees with a DBH greater than or equal to 6.5 inches included tree number, 
       species, DBH, height, crown base height, and crown ratio. Additionally, within the tree plot, a smaller 1/100-acre plot was nested 
       to collect information for saplings with a DBH less than 6.5 inches.
+
+
+      Additional resources:
+      - [Plot Survey Final Report](https://fbstac-stands.s3.amazonaws.com/plots/documents/BLM_Rogue_Valley_LiDAR_Final_Report_HamerEnvironmental.pdf)
+      - [Plot Survey Raw database](https://fbstac-stands.s3.amazonaws.com/plots/raw/blm/BLM_Rogue_Valley_LiDAR_Plot+Data_UW20150414.sqlite)
     label_type: vector
     label_properties: [aboveground_biomass]
     label_description: 
@@ -71,14 +90,18 @@ labels:
       url: 
 
   WA-DNR: 
-    provider_name: Washington Department of Natural Resources
-    provider_url: https://gis.dnr.wa.gov/site2/rest/services/Public_Forest_Mgmt/WADNR_PUBLIC_RS_FRIS/MapServer
+    provider_name: Washington Department of Natural Resources (WADNR)
+    provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: > 
-      RS-FRIS is a remote-sensing based forest inventory for WA DNR State Trust lands. RS-FRIS predicts forest 
-      conditions using statistical models that relate field measurements to three-dimensional remotely-sensed data 
-      (PhoDAR and LiDAR point clouds). Forest metrics are predicted at a scale of 1/10th acre and stored as rasters. 
-      The attributes of each RIU are calculated as the mean of the raster cell values that fall within each polygon. 
+    description: | 
+      Forest plots from the Washington Department of Natural Resources (WADNR).
+
+
+      Additional resources:
+      - [Plot Survey Field Protocol](https://fbstac-stands.s3.amazonaws.com/plots/documents/RS-FRIS-PlotProtocol.pdf)
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/FRIS_field_procedure_guide_v140.pdf)
+      - [Plot Survey Field Data Dictionary](https://fbstac-stands.s3.amazonaws.com/plots/documents/FRIS2_DataDictionary.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/wadnr/rsfris_plot_data.sqlite)
     label_description: Predicted above ground live biomass. Units = metric tons / acre. 1 metric ton = 1000 kg.
     label_type: vector
     label_properties: [aboveground_biomass]
@@ -89,25 +112,36 @@ labels:
       url: 
 
   USFS-BLUE-MOUNTAINS: 
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Blue Mountains National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Blue Mountains National Forest.
+
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description: 
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
-    label_name: '' 
+    label_name: 
     label_license: 
       type: propietary
       url: 
 
   USFS-FREMONT-WINEMA: 
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Fremont-Winema National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Fremont-Winema National Forest.
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description: 
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
@@ -117,71 +151,96 @@ labels:
       url: 
 
   USFS-GIFFORD-PINCHOT: 
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url:
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Gifford Pinchot National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Gifford Pinchot National Forest.
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description: 
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
-    label_name: '' 
+    label_name:
     label_license: 
       type: propietary
       url: 
 
   USFS-MOUNT-BAKER-SNOQUALMIE:
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url: 
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Mount Baker-Snoqualmie National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Mount Baker-Snoqualmie National Forest.
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description:
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
-    label_name: '' 
+    label_name:
     label_license: 
       type: propietary
       url: 
 
   USFS-ROGUE:
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url:
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Rogue River-Siskiyou National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Rogue River-Siskiyou National Forest.
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description:
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
-    label_name: '' 
+    label_name:
     label_license: 
       type: propietary
       url: 
 
   USFS-UMPQUA:
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url:
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Umpqua National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Umpqua National Forest.
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description:
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
-    label_name: '' 
+    label_name:
     label_license: 
       type: propietary
       url: 
 
   USFS-WENATCHEE:
-    provider_name: US Forest Service
-    provider_url: ''
+    provider_name: US Forest Service (USFS)
+    provider_url:
     provider_roles: [licensor, producer, processor, host]
-    description: Forest plots from the US Forest Service Wenatchee National Forest.
-    label_description: ''
+    description: |
+      Forest plots from the US Forest Service Wenatchee National Forest.
+
+      Additional resources:
+      - [Plot Survey Field Procedures](https://fbstac-stands.s3.amazonaws.com/plots/documents/USFS_2018_Region_6_LiDAR_Field_Plot_Procedures_V2.pdf)
+      - [Plot Survey Raw Database](https://fbstac-stands.s3.amazonaws.com/plots/raw/usfs/FVS_Data.sqlite)
+    label_description:
     label_type: vector
     label_properties: [aboveground_biomass]
     label_task: regression
-    label_name: '' 
+    label_name:
     label_license: 
       type: propietary
       url: 
@@ -196,7 +255,6 @@ items:
         type: [licensor, producer, processor, host]
         api: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage
         url: https://www.usgs.gov/3d-elevation-program
-        # collection: WA_NAIP_2021_9586
     license: 
       type: propietary
       url: https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits
@@ -210,7 +268,6 @@ items:
         type: [licensor, producer, processor, host]
         api: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage
         url: https://www.usgs.gov/3d-elevation-program
-        # collection: WA_NAIP_2021_9586
     license: 
       type: propietary
       url: https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits
@@ -225,13 +282,11 @@ items:
         roles: [host] 
         api: https://earthengine-highvolume.googleapis.com
         url: https://developers.google.com/earth-engine/datasets/catalog/USDA_NAIP_DOQQ 
-        # collection: USDA/NAIP/DOQQ
       NOAA:
         name: NOAA Digital Coast
         roles: [host]
         api: 
         url: https://coast.noaa.gov/htdata/raster5/imagery/WA_NAIP_2021_9586/
-        # collection: WA_NAIP_2021_9586
       USDA:
         name: USDA Farm Production and Conservation - Business Center, Geospatial Enterprise Operations
         roles: [licensor, producer]
@@ -249,7 +304,6 @@ items:
         roles: [host]
         api: https://earthengine.googleapis.com
         url: https://developers.google.com/earth-engine/datasets/catalog/LANDSAT/LC08/C02/T1_L2
-        # collection: LANDSAT/LC08/C01/T1_SR
         USGS:
           name: USGS Earth Explorer
           roles: [licensor, producer]
@@ -260,61 +314,32 @@ items:
 
   lidar:
     description: > 
-      1-hectare Lidar plots. 
+      1-hectare Lidar plots from the Bureau of Land Management (BLM), Washington State Department 
+      of Natural Resources (WADNR), and US Forest Service (USFS). 
     providers:
-      Google:
-        name: 
-        roles: 
+      BLM:
+        name: Bureau of Land Management (BLM)
+        roles: [licensor, producer, processor, host]
         api: 
         url: 
+      WADNR:
+        name: Washington Department of Natural Resources (WADNR)
+        roles: [licensor, producer, processor, host]
+        api: 
+        url: 
+      USFS:
+        name: US Forest Service (USFS)
+        roles: [licensor, producer, processor, host]
+        api: 
+        url:
     license: 
       type: 
       url:
-  lidar-intensity:
+  lidar-rast:
     description: > 
-      Lidar intensity images derived from 1-hectare Lidar plots. 
+      Lidar Canopy Height Model (CHM), lidar Digital Terrain Model (DTM), and lidar intensity images derived 
+      from 1-hectare Lidar plots. 
     providers:
-      Google:
-        name: 
-        roles: 
-        api: 
-        url: 
-    license: 
-      type: 
-      url:
-  lidar-chm:
-    description: > 
-      Canopy Height Model (CHM) images derived from 1-hectare Lidar plots. 
-    providers:
-      Google:
-        name: 
-        roles: 
-        api: 
-        url: 
-    license: 
-      type: 
-      url:
-  lidar-dtm:
-    description: > 
-      Digital Terrain Model (DTM) images derived from 1-hectare Lidar plots. 
-    providers:
-      Google:
-        name: 
-        roles: 
-        api: 
-        url: 
-    license: 
-      type: 
-      url:
-  lidar-crowns:
-    description: > 
-      Tree-crowns polygon features derived from 1-hectare Lidar plots.
-    providers:
-      Google:
-        name: 
-        roles: 
-        api: 
-        url: 
     license: 
       type: 
       url:
