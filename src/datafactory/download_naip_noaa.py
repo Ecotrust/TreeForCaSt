@@ -25,8 +25,8 @@ import json
 from PIL import Image
 
 import numpy as np
-import pandas as pd
 import geopandas as gpd
+import pandas as pd
 import rasterio
 from rasterio import transform, MemoryFile, windows
 from rasterio.warp import reproject, Resampling
@@ -38,8 +38,8 @@ from pyproj import CRS
 from gdstools import degrees_to_meters, infer_utm
 
 # %%
-# DATADIR = Path('/mnt/data/FESDataRepo/stac_plots/data/')
-DATADIR = Path('/mnt/data/users/ygalvan/fbstac_plots/data/dev/')
+DATADIR = Path('/mnt/data/FESDataRepo/stac_plots/')
+# DATADIR = Path('/mnt/data/users/ygalvan/fbstac_plots/data/dev/')
 replace = True
 
 def center_crop_array(new_size, array):
@@ -72,13 +72,16 @@ def bbox_padding(geom:object, padding:int=1e3):
 crs4326 = CRS.from_epsg(4326)
 
 # Load plots and naip file info
-plots = gpd.read_file(DATADIR / 'features/plot_features.geojson')
-plots = plots.iloc[:10].sort_values(by='uuid')
-orwa_tileidx = gpd.read_file(DATADIR / 'features/orwa_naip_tileidx.geojson')
+plots = gpd.read_file(DATADIR / 'processed/features/plot_features.geojson')
+outliers = pd.read_csv(DATADIR / 'processed/features/outlier_uuids.csv')
+outliers['uuid'] = outliers.outlier_uuid.apply(lambda x: x.split('-')[0])
+plots = plots[~plots.uuid.isin(outliers.uuid.unique())]
+# plots = plots.sort_values(by='uuid').iloc[:20]
+orwa_tileidx = gpd.read_file(DATADIR / 'processed/features/orwa_naip_tileidx.geojson')
 
 # Four vrt files, two for OR and two for WA
 # URL0 = 'https://coast.noaa.gov/htdata/raster5/imagery/WA_NAIP_2021_9586/WA_NAIP_2021.0.vrt'
-# URL1 = 'https://coast.noaa.gov/htdata/raster5/imagery/WA_NAIP_2021_9586/WA_NAIP_2021.0.vrt'
+# URL1 = 'https://coast.noaa.gov/htdata/raster5/imagery/WA_NAIP_2021_9586/WA_NAIP_2021.1.vrt'
 # URL2 = 'https://coastalimagery.blob.core.windows.net/digitalcoast/OR_NAIP_2020_9504/or_naip_2020_10.vrt'
 # URL3 = 'https://coastalimagery.blob.core.windows.net/digitalcoast/OR_NAIP_2020_9504/or_naip_2020_11.vrt'
 # -- We don't need the vrt files as we are using the tif urls directly. Keeping links for reference --
@@ -90,7 +93,7 @@ errors = []
 for i, row in plots.iterrows():
 
     geom = plots[plots.index == i].geometry.values[0]
-    geom = box(*bbox_padding(geom.centroid))
+    geom = box(*bbox_padding(geom.centroid, padding=90))
     bbox = geom.bounds
 
     # Find the tile that intersects with plot bbox
@@ -100,7 +103,7 @@ for i, row in plots.iterrows():
     date = tile.date.iloc[0]
     state = tile.state.iloc[0]
 
-    outfile = DATADIR / f"naip/{date.year}" / f"{row.uuid}_{date.year}_{row.source}_NAIP_NOAA-cog.tif"
+    outfile = DATADIR / 'interim' / f"naip/{date.year}" / f"{row.uuid}_{date.year}_{row.source}_NAIP_NOAA-cog.tif"
     if outfile.exists() and replace is False:
         print('File exists, skipping', outfile)
         continue
@@ -124,7 +127,7 @@ for i, row in plots.iterrows():
             'driver': 'GTiff',
             'interleave': 'band',
             'tiled': True,
-            'crs': crs4326,
+            'crs': crs4326,#CRS.from_epsg(row.epsg),
             'transform': dst_transform,
             'width': width,
             'height': height,
@@ -146,8 +149,8 @@ for i, row in plots.iterrows():
                         src_transform=src_transform,#.window_transform(window),
                         src_crs=src.crs,
                         dst_transform=dst_transform,
-                        dst_crs=rasterio.crs.CRS.from_epsg(4326),
-                        resampling=Resampling.bilinear
+                        dst_crs=crs4326,#CRS.from_epsg(row.epsg),
+                        resampling=Resampling.nearest
                     )
                     dst.write(output)
 
@@ -169,9 +172,9 @@ for i, row in plots.iterrows():
                     np.moveaxis(output[:3], 0, -1)).convert('RGB')
                 h, w = preview.size
                 # Change preview res to 30m
-                new_w = int(w * src.res[0] / 3)
-                new_h = int(h * src.res[1] / 3)
-                preview = preview.resize((new_w, new_h))
+                # new_w = int(w * src.res[0] / 3)
+                # new_h = int(h * src.res[1] / 3)
+                # preview = preview.resize((new_w, new_h))
                 preview.save(outfile.parent / outfile.name.replace('-cog.tif',
                             '-preview.png'), optimize=True)
 
