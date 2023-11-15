@@ -220,17 +220,21 @@ def create_pc_item(
     crs = CRS.from_epsg(4326)
     asset_crs = CRS.from_string(copc['spatialreference'])
     asset_bbox = convertBBox(stats['bbox']['native']['bbox']) 
-    # asset_geom = boundary['boundary_json'] 
+    asset_geom = json.loads(
+        gpd.GeoSeries(geometry.box(*asset_bbox, ccw=True), crs=asset_crs).to_json()
+    ).get('features')[0]
 
     # Item footprint in epsg:4326
     try:
-        geom = stats['bbox']['EPSG:4326']
-        bbox = convertBBox(geom['bbox'])
+        bbox = convertBBox(stats['bbox']['EPSG:4326']['bbox'])
         # boundary = geom['boundary']
     except KeyError:
-        logging.warning(f'Using native bbox.')
-        geom = stats['bbox']['native']
-        bbox = convertBBox(geom['bbox'])      
+        logging.warning(f'Error loading EPSG:4326 bbox. Using native bbox instead.')
+        bbox = asset_geom.to_crs(crs).bounds.values.tolist()[0]
+
+    geom = json.loads(
+        gpd.GeoSeries(geometry.box(*bbox, ccw=True), crs=crs).to_json()
+    ).get('features')[0]
 
     # try:
     #     pc_date = capture_date(copc)
@@ -240,31 +244,31 @@ def create_pc_item(
     day = copc['creation_doy']
     pc_date = datetime.datetime(int(year), 1, day or 1)
     
-    try:
-        pc_geom = convertGeometry(
-            boundary['boundary_json'],
-            copc['comp_spatialreference'],
-            crs
-        )
-        asset_geom = convertGeometry(
-            boundary['boundary_json'],
-            copc['comp_spatialreference'],
-            asset_crs
-        )
-    except KeyError:
-        logging.warning(f'No geometry found for {pc_id}. Using bbox.')
-        pc_geom = {
-            'type': 'Polygon',
-            'coordinates': [
-                list(geometry.box(*bbox, crs=crs, ccw=True).exterior.coords)
-            ]
-        } 
-        asset_geom = {
-            'type': 'Polygon',
-            'coordinates': [
-                list(geometry.box(*asset_bbox, crs=asset_crs, ccw=True).exterior.coords)
-            ]
-        }   
+    # try:
+    #     pc_geom = convertGeometry(
+    #         boundary['boundary_json'],
+    #         copc['comp_spatialreference'],
+    #         crs
+    #     )
+    #     asset_geom = convertGeometry(
+    #         boundary['boundary_json'],
+    #         copc['comp_spatialreference'],
+    #         asset_crs
+    #     )
+    # except KeyError:
+    #     logging.warning(f'No geometry found for {pc_id}. Using bbox.')
+    #     pc_geom = {
+    #         'type': 'Polygon',
+    #         'coordinates': [
+    #             list(geometry.box(*bbox, crs=crs, ccw=True).exterior.coords)
+    #         ]
+    #     } 
+    #     asset_geom = {
+    #         'type': 'Polygon',
+    #         'coordinates': [
+    #             list(geometry.box(*asset_bbox, crs=asset_crs, ccw=True).exterior.coords)
+    #         ]
+    #     }   
 
     density = boundary.get('avg_pt_per_sq_unit', 0)
     schemas = [Schema(x) for x in info['schema']['dimensions']]
@@ -272,7 +276,7 @@ def create_pc_item(
 
     item = Item(
         id=pc_id,
-        geometry=pc_geom,
+        geometry=geom['geometry'],
         bbox=bbox,
         datetime=pc_date,
         properties={},
@@ -296,7 +300,7 @@ def create_pc_item(
     asset_ext = AssetProjectionExtension.ext(item.assets['feature'])
     asset_ext.epsg = asset_crs.to_epsg()
     asset_ext.bbox = asset_bbox
-    asset_ext.geometry = asset_geom
+    asset_ext.geometry = asset_geom['geometry']
 
     crown_shp = filepath.parent / f'{filepath.stem}.geojson'
     if os.path.exists(crown_shp):
@@ -477,12 +481,12 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
     conf = ConfigLoader(rootpath).load()
     if run_as == 'dev':
         PLOTS = Path(conf.DEV_PLOTS)
-        DATADIR = Path(conf.DEV_DATADIR)
+        DATADIR = Path(conf.DEV_DATADIR) / 'processed'
         PLOTATTRS = Path(conf.DEV_PLOTATTRS)
         idx = 8
     else:
         PLOTS = conf.DEV_PLOTS
-        DATADIR = Path(conf.DATADIR)
+        DATADIR = Path(conf.DATADIR) / 'processed'
         PLOTATTRS = Path(conf.PLOTATTRS)
         idx = 6
 
