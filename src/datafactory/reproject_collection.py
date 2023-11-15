@@ -2,6 +2,9 @@
 from pathlib import Path
 import json
 import os
+import logging
+from datetime import datetime
+
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rio_cogeo.cogeo import cog_translate
 from rio_cogeo.profiles import cog_profiles
@@ -12,16 +15,31 @@ import geopandas as gpd
 import numpy as np
 import shapely
 
-from gdstools import multithreaded_execution, image_collection, infer_utm
+from gdstools import multithreaded_execution, image_collection, infer_utm, ConfigLoader
 
-collection = '3dep_dtm'
 
-images = image_collection(f'data/dev/interim/{collection}')
-outpath = Path(f'data/dev/processed/{collection}')
-plots = gpd.read_file('data/dev/features/plot_features.geojson')
+now = datetime.now()
+dt_string = now.strftime("%Y%m%d%H%M%S")
+logging.basicConfig(filename=f'reproject_collection_{dt_string}.log', encoding='utf-8', filemode='w', 
+                    level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
+
+collection = 'naip'
+
+# Load config file
+run_as = 'dev'
+conf = ConfigLoader(Path(__file__).parent.parent).load()
+
+if run_as == 'dev':
+    DATADIR = Path(conf.DEV_DATADIR)
+else:
+    DATADIR = Path(conf.DATADIR)
+
+images = image_collection(DATADIR / f'interim/{collection}')
+outpath = Path(DATADIR / f'processed/{collection}')
+plots = gpd.read_file(DATADIR / 'processed/features/plot_features.geojson')
 
 buffer_size = 60
-naip_path = 'data/dev/stac/naip_reprojected'
+naip_path = DATADIR / 'processed/naip'
 
 if collection == 'landsat8':
     match_naip = True
@@ -41,14 +59,14 @@ elif collection == '3dep':
     max_pixval = 3000
     dtype = rasterio.float32
     viz_bands = [0]
-elif collection == '3dep_dtm':
+elif collection == '3dep-dtm':
     match_naip = True
     res=10
     max_pixval = 100
     dtype = rasterio.float32
     viz_bands = [0]
 
-def reproject_image(filepath, outpath, match_naip=False, naip_path=None):
+def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwrite=False):
     with rasterio.open(filepath) as src:
         
         data = src.read()
@@ -56,6 +74,16 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None):
         year = Path(filepath).name.split('_')[1]
         uuid = Path(filepath).name.split('_')[0]
 
+        if year.isdigit():
+            out_path = Path(outpath) / year / Path(filepath).name
+        else:
+            out_path = Path(outpath) / Path(filepath).name
+
+        if os.path.exists(out_path) and not overwrite:
+            logging.info(f'File {out_path} already exists. Skipping.')
+            return
+
+        
         # %%
         transform, width, height = calculate_default_transform(
             src.crs, dst_crs, src.width, src.height, *src.bounds
@@ -87,16 +115,15 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None):
                     resampling=Resampling.nearest,
                 )
 
-                if year.isdigit():
-                    out_path = Path(outpath) / year / Path(filepath).name
-                else:
-                    out_path = Path(outpath) / Path(filepath).name
-                out_path.parent.mkdir(parents=True, exist_ok=True)
                 dst.write(output)
 
                 # Extract 120x120m window using plot bbox
                 plot = plots[plots.uuid == uuid]
-                new_bbox = [plot.utm_xmin.iloc[0], plot.utm_ymin.iloc[0], plot.utm_xmax.iloc[0], plot.utm_ymax.iloc[0]]
+                try:
+                    new_bbox = [plot.utm_xmin.iloc[0], plot.utm_ymin.iloc[0], plot.utm_xmax.iloc[0], plot.utm_ymax.iloc[0]]
+                except IndexError:
+                    logging.warning(f'No data found for plot {uuid}.')
+                    return
                 # if match_naip:
                 #     naip_collection = image_collection(naip_path)
                 #     uuid = Path(filepath).name.split('_')[0]
@@ -109,6 +136,7 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None):
                 #     geom = shapely.geometry.box(*list(dst.bounds))
                 #     centroid = gpd.GeoSeries(geom, crs=dst_crs).centroid
                 #     new_bbox = centroid.buffer(buffer_size, join_style=2).bounds.values[0]
+                out_path.parent.mkdir(parents=True, exist_ok=True)
 
                 new_geom = shapely.geometry.box(*list(new_bbox))
                 window = windows.from_bounds(*new_bbox, dst.transform)
@@ -163,14 +191,15 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None):
                         output = np.zeros((src.count, new_data.shape[0], new_data.shape[1]), dtype)
                         dst2.write(new_data)
 
-                        cog_translate(dst2, out_path, cog_profile, in_memory=True, quiet=False)
+                        cog_translate(dst2, out_path, cog_profile, in_memory=True, quiet=True)
 
 params = [
     {
         'filepath': i,
         'outpath': outpath,
         'match_naip': match_naip,
-        'naip_path': naip_path
+        'naip_path': naip_path,
+        'overwrite': False
     }
     for i in images
 ]
