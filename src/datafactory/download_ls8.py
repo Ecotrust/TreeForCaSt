@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 
+import pandas as pd
 import geopandas as gpd
 import ee
 
@@ -142,27 +143,33 @@ def bbox_padding(geom, padding=1e3):
 
 if __name__ == "__main__":
 
-    run_as = "dev"
+    run_as = "prod"
     conf = ConfigLoader(Path(__file__).parent.parent).load()
     api_url = conf['items']['landsat8']['providers']['Google']['api']
-    GRID = Path(conf.GRID)
-    grid = gpd.read_file(GRID)
+    OUTLIERS = Path(conf.OUTLIERS)
+    PLOTS = Path(conf.PLOTS)
+    # GRID = Path(conf.GRID)
+    # grid = gpd.read_file(GRID)
+    outliers = pd.read_csv(OUTLIERS)
+    outliers['uuid'] = outliers.outlier_uuid.apply(lambda x: x.split('-')[0])
+    outliers = outliers.set_index('uuid')
+    plots = gpd.read_file(PLOTS)
+    plots = plots.set_index('uuid')
+    plots = plots[~plots.index.isin(outliers.index)]
 
-    if run_as == "dev":
-        PLOTS = Path(conf.PLOTS)
-        PROJDATADIR = Path(conf.DEV_DATADIR)
-        WORKERS = 20
-        # Load plots and naip file info
-        plots = gpd.read_file(PROJDATADIR.parent / 'features/plot_features.geojson')
-        plots = plots.sort_values('uuid').iloc[:20]
-    elif run_as == "prod":
-        PLOTS = Path(conf.PLOTS)
-        PROJDATADIR = Path(conf.DATADIR)
-        WORKERS = 20
-        plots = gpd.read_file(PROJDATADIR / 'features/plot_features.geojson')
+    if run_as == 'dev':
+        DATADIR = Path(conf.DEV_DATADIR)
+        plots = plots.sort_index().iloc[:20]
+        overwrite = True
+        
+    else:
+        PLOTS = conf.PLOTS
+        DATADIR = Path(conf.DATADIR)
+        overwrite = False
+        # plots = gpd.read_file(PLOTS)
 
-    ovly = grid.overlay(plots)
-    gdf = grid[grid.CELL_ID.isin(ovly['CELL_ID'].unique())]
+    # ovly = grid.overlay(plots)
+    # plots = grid[grid.CELL_ID.isin(ovly['CELL_ID'].unique())]
 
     # Initialize the Earth Engine module.
     # Setup your Google Earth Engine API key before running this script.
@@ -174,17 +181,17 @@ if __name__ == "__main__":
 
     for year in years:
 
-        out_path = create_directory_tree(PROJDATADIR, 'interim', 'landsat8', str(year))
+        out_path = create_directory_tree(DATADIR, 'interim', 'landsat8', str(year))
 
         params = [
             {
                 "bbox": bbox_padding(row.geometry.centroid, padding=90), #row.geometry.bounds, 
                 "year": year,
                 "out_path": out_path,
-                "prefix": f"{row.uuid}_{year}_{row.source}",
+                "prefix": f"{row[0]}_{year}_{row.source}",
                 "season": "leafon",
-                "overwrite": True,
+                "overwrite": overwrite,
             } for row in plots.itertuples()
         ]
 
-        multithreaded_execution(get_landsat8, params, WORKERS)
+        multithreaded_execution(get_landsat8, params, 10)

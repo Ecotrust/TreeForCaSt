@@ -89,7 +89,8 @@ def naip_from_gee(
         image.set_viz_params("bands", ["R", "G", "B"])
         image.id = outfilepref
 
-        return image.to_array(), image.metadata 
+        imgarray, profile = image.to_array()
+        return imgarray, profile, image.metadata 
 
     except Exception as e:
         print(f"Failed to load image for {outfilepref}: {e}")
@@ -99,6 +100,7 @@ def naip_from_gee(
 def quad_fetch(
         bbox: tuple, 
         dim:int=1, 
+        epsg:int=4326,
         num_threads:int=None, 
         **kwargs
     ):
@@ -131,9 +133,22 @@ def quad_fetch(
 
         bboxes = split_bbox(dim, bbox)
 
+        # Define the semaphore with the desired number of threads
+        # semaphore = threading.Semaphore(30)
+
         get_quads = partial(naip_from_gee, **kwargs)
         with ThreadPool(num_threads) as p:
             quads = p.map(get_quads, bboxes)
+            # quads = []
+            # for i, bbox in enumerate(bboxes):
+            #     semaphore.acquire()
+            #     p.map_async(
+            #         get_quads, 
+            #         (bbox,), 
+            #         callback=lambda out: (quads.append([i, out]), semaphore.release())
+            #     )
+            # p.close()
+            # p.join()
 
         # Split quads list in tuples of size dim
         images = [x[0][0] for x in quads]
@@ -143,7 +158,7 @@ def quad_fetch(
         [x.reverse() for x in quad_list]
         image = np.concatenate(
             [
-                np.hstack(quad_list[x]) for x in range(0, len(quad_list))
+               np.hstack(quad_list[x]) for x in range(0, len(quad_list))
             ], 2
         )
 
@@ -158,6 +173,7 @@ def quad_fetch(
             first.e,
             last.f
         )
+
         h, w = image.shape[1:]
         profile.update(width=w, height=h)
         profile['dtype'] = 'uint8'
@@ -177,9 +193,10 @@ def get_naip(
     outpath: str or Path, 
     outfilepref: str,
     year:int, 
+    epsg:int=4326,
     dim:int=3, 
     overwrite:bool=False, 
-    # num_threads:int=None
+    num_threads:int=None
 ):
     """
     Downloads a NAIP image from Google Earth Engine and save it as a Cloud-Optimized GeoTIFF (COG) file.
@@ -212,7 +229,8 @@ def get_naip(
         return
 
     try:
-        image, profile, metadata = quad_fetch(bbox, dim, None, outfilepref=outfilepref, year=year)
+        image, profile, metadata = quad_fetch(
+            bbox, dim, epsg, num_threads, outfilepref=outfilepref, year=year)
     except Exception as e:
         print(f"Failed to fetch {outfilepref}: {e}")
         return
@@ -221,7 +239,7 @@ def get_naip(
         np.moveaxis(image[:3], 0, -1).astype(np.uint8)
     ).convert('RGB')
     h, w = preview.size
-    preview = preview.resize((w//10, h//10))
+    # preview = preview.resize((w//10, h//10))
     preview.save(outpath / f'{outfilepref}-preview.png', optimize=True)
     # profile = ['properties']['profile']
     # metadata['properties'].pop('profile')
@@ -259,7 +277,7 @@ def bbox_padding(geom:object, padding:int=1e3):
 
 if "__main__" == __name__:
 
-    run_as = 'dev'
+    run_as = 'prod'
     res = 1
     # Load config file
     conf = ConfigLoader(Path(__file__).parent.parent).load()
@@ -272,34 +290,36 @@ if "__main__" == __name__:
         DATADIR = Path(conf.DEV_DATADIR)
         gdf = gpd.read_file(PLOTS)
         gdf = gdf.sort_values('uuid').iloc[:20]
-        ovly = grid.overlay(gdf)
-        gdf = grid[grid.CELL_ID.isin(ovly['CELL_ID'].unique())]
         
     else:
         PLOTS = conf.DEV_PLOTS
         DATADIR = Path(conf.DATADIR)
         gdf = gpd.read_file(PLOTS)
 
+    # ovly = grid.overlay(gdf)
+    # gdf = grid[grid.CELL_ID.isin(ovly['CELL_ID'].unique())]
+
     ee.Initialize(opt_url=api_url)
 
     # Overwrite years if needed
-    years = [2009, 2011, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+    years = [2011, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
 
     for year in years:
-        outpath = Path(DATADIR) / 'fulltiles'/ 'naip' / str(year)
+        outpath = Path(DATADIR) / 'interim' / 'naip' / str(year)
         outpath.mkdir(exist_ok=True, parents=True)
 
         params = [
             {
-                "bbox": row.geometry.bounds, #bbox_padding(row.geometry.centroid, padding=300), 
+                "bbox": bbox_padding(row.geometry.centroid, padding=100), 
                 "year": year,
-                "dim": 6,
+                "dim": 1,
+                # "num_threads": 25, #GEE won't allow more than 30 simultaneous requests.
                 "outpath": outpath,
-                "outfilepref": f"{row.CELL_ID}_{row.PRIMARY_STATE}_{year}_NAIP_DOQQ", #f"{row.uuid}_{year}_{row.source}_NAIP_DOQQ",
+                "outfilepref": f"{row.uuid}_{year}_{row.source}_NAIP_DOQQ",#f"{row.CELL_ID}_{row.PRIMARY_STATE}_{year}_NAIP_DOQQ", 
                 "overwrite": True
             } for row in gdf.itertuples()
         ]
 
-        # Product dim^2 x threads must be < 30 or else GEE will throw an error
-        multithreaded_execution(get_naip, params, 1)
+        # If num_threads is not defined, product dim^2 x threads must be < 30 or else GEE will throw an error
+        multithreaded_execution(get_naip, params, 20)
         # get_naip(**params[0])

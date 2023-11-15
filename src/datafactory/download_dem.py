@@ -11,6 +11,7 @@ from multiprocessing.pool import ThreadPool
 from PIL import Image
 import matplotlib.pyplot as plt
 
+import pandas as pd
 import numpy as np
 import geopandas as gpd
 import rasterio
@@ -786,19 +787,25 @@ if __name__ == '__main__':
 
     run_as = 'dev'
     res = 1
+
     # Load config file
     conf = ConfigLoader(Path(__file__).parent.parent).load()
-    # Build catalog
+    OUTLIERS = Path(conf.OUTLIERS)
+    PLOTS = Path(conf.PLOTS)
+    outliers = pd.read_csv(OUTLIERS)
+    outliers['uuid'] = outliers.outlier_uuid.apply(lambda x: x.split('-')[0])
+    # outliers = outliers.set_index('uuid')
+    plots = gpd.read_file(PLOTS)
+    # plots = plots.set_index('uuid')
+    plots = plots[~plots.uuid.isin(outliers.uuid)]
+
     if run_as == 'dev':
-        PLOTS = Path(conf.DEV_PLOTS)
         DATADIR = Path(conf.DEV_DATADIR)
-        gdf = gpd.read_file(PLOTS)
-        gdf = gdf.sort_values('uuid').iloc[:20] #[gdf.uuid.isin(gdf.uuid[:100])]
+        plots = gpd.read_file(PLOTS)
+        plots = plots.sort_values('uuid').iloc[:20] #[gdf.uuid.isin(gdf.uuid[:100])]
     else:
-        PLOTS = conf.DEV_PLOTS
         DATADIR = Path(conf.DATADIR)
-        gdf = gpd.read_file(PLOTS)
-    
+
     out_path = DATADIR / 'interim' / '3dep'
     out_path.mkdir(exist_ok=True, parents=True)
 
@@ -806,13 +813,13 @@ if __name__ == '__main__':
         {
             'cell_id': row.uuid,
             'geom': bbox_padding(row.geometry.centroid, 90),
-            'state': row.agency,
+            'state': row.source,
             'padding': 0,
             'out_dir': out_path,
             'suffix': '',
             'res': res,
             'overwrite': True
-        } for row in gdf.itertuples()
+        } for row in plots.itertuples()
     ]
 
     # fetch_dems(**params[0])
