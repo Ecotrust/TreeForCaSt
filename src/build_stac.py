@@ -30,6 +30,7 @@ import logging
 import json
 import datetime
 from pathlib import Path
+import shutil
 
 from pystac import (
     Extent, 
@@ -481,7 +482,7 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
         PLOTS = conf.DEV_PLOTS
         DATADIR = Path(conf.DATADIR) / 'processed'
         PLOTATTRS = Path(conf.PLOTATTRS)
-        idx = 6
+        idx = 5
 
     logging.info('Running build_stac.py as %s', run_as)
     logging.info('Reading plot shapefile from %s', PLOTS)
@@ -756,10 +757,12 @@ def build_stac(rootpath: Path, run_as: str = 'dev'):
 if __name__ == '__main__':
 
     TARGET = '/home/ygalvan/stac/fbstac-plots'
+    shutil.rmtree(TARGET, ignore_errors=True)
+
     rootpath = Path(__file__).parent
     conf = ConfigLoader(rootpath).load()
 
-    fb = build_stac(rootpath, run_as='dev')
+    fb = build_stac(rootpath, run_as='prod')
     
     # Save catalog
     print('Saving catalog to', TARGET)
