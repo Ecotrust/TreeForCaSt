@@ -26,7 +26,7 @@ logging.basicConfig(filename=f'reproject_collection_{dt_string}.log', encoding='
 collection = 'naip'
 
 # Load config file
-run_as = 'dev'
+run_as = 'prod'
 conf = ConfigLoader(Path(__file__).parent.parent).load()
 
 if run_as == 'dev':
@@ -70,6 +70,10 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwri
     with rasterio.open(filepath) as src:
         
         data = src.read()
+        if not data.any():
+            logging.warning(f'No data found for {filepath}. Skipping.')
+            return
+
         dst_crs = infer_utm(list(src.bounds))
         year = Path(filepath).name.split('_')[1]
         uuid = Path(filepath).name.split('_')[0]
@@ -82,7 +86,6 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwri
         if os.path.exists(out_path) and not overwrite:
             logging.info(f'File {out_path} already exists. Skipping.')
             return
-
         
         # %%
         transform, width, height = calculate_default_transform(
@@ -140,6 +143,7 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwri
 
                 new_geom = shapely.geometry.box(*list(new_bbox))
                 window = windows.from_bounds(*new_bbox, dst.transform)
+                new_data = dst.read(window=window)
 
                 # Update metadata
                 metadatapath = filepath.replace('-cog.tif', '-metadata.json')
@@ -166,8 +170,6 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwri
                     dst_crs, dst_crs, buffer_size*2/res, buffer_size*2/res, *new_bbox
                 )
 
-                new_data = dst.read(window=window)
-
                 # Save preview
                 if len(viz_bands) > 1:
                     preview = Image.fromarray(
@@ -176,7 +178,10 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwri
                     preview = Image.fromarray(
                         (np.squeeze(new_data[viz_bands]) / max_pixval) * 255).convert('RGB')
 
-                preview.save(out_path.parent / out_path.name.replace('-cog.tif', '-preview.png'), optimize=True)
+                # if out_path.name.endswith('NOAA-cog.tif'): 
+                #     print('here')
+
+                preview.resize((width, height)).save(out_path.parent / out_path.name.replace('-cog.tif', '-preview.png'), optimize=True)
 
                 kwargs.update(
                     {
@@ -191,7 +196,12 @@ def reproject_image(filepath, outpath, match_naip=False, naip_path=None, overwri
                         output = np.zeros((src.count, new_data.shape[0], new_data.shape[1]), dtype)
                         dst2.write(new_data)
 
-                        cog_translate(dst2, out_path, cog_profile, in_memory=True, quiet=True)
+                        try:
+                            cog_translate(dst2, out_path, cog_profile, in_memory=True, quiet=True)
+                        except KeyError as e:
+                            logging.warning(f'Error writing {out_path}: {e}')
+                            return
+
 
 params = [
     {
@@ -204,4 +214,4 @@ params = [
     for i in images
 ]
 
-multithreaded_execution(reproject_image, params)
+multithreaded_execution(reproject_image, params, threads=8)
