@@ -16,6 +16,8 @@ Project Organization
         ├── datafactory    <- Scripts to download or generate data
         └── build_stac.py  <- Script to build STAC catalog from data
 
---------
+------------
+
+Browse [Forest Plots STAC](https://radiantearth.github.io/stac-browser/#/external/fbstac-stands.s3.amazonaws.com/plots/catalog/catalog.json)
 
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
