@@ -17,8 +17,8 @@ dependencies:
   - pystac=1.8
   - pyproj
   - python=3.10
-  - pytorch=2.0.1
-  - pytorch-cuda=11.7
+  - pytorch::pytorch=2.0.1
+  - pytorch::pytorch-cuda=11.7
   - pydantic=1.9.2
   - rasterio
   - rasterstats
@@ -30,7 +30,7 @@ dependencies:
   - seaborn
   - shapely
   - sphinx
-  - torchvision=0.15.2
+  - pytorch::torchvision=0.15.2
   - torchmetrics 
   - tqdm
   - pysheds
