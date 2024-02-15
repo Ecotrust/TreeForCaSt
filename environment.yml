@@ -17,8 +17,10 @@ dependencies:
   - pystac=1.8
   - pyproj
   - python=3.10
-  - pytorch::pytorch=2.0.1
-  - pytorch::pytorch-cuda=11.7
+  # - conda-forge::pdal
+  # - conda-forge::python-pdal
+  - pytorch=2.0.1
+  - pytorch-cuda=11.7
   - pydantic=1.9.2
   - rasterio
   - rasterstats
@@ -41,4 +43,4 @@ dependencies:
       - torchgeo
       - wget
       - git+https://github.com/Ecotrust/gdstools@v0.1
-      - -e . # change . to the desired local package path
+      - -e . 
