@@ -1,7 +1,7 @@
-fbstac_plots
+TreeForCaSt
 ==============================
 
-Oregon and Washington State forest plots, attributes, and imagery STAC for forest benchmarking and modeling.
+A Spatio-Temporal Asset Catalog (STAC) for Modeling Forest Composition and Structure in the Pacific Northwest.
 
 Project Organization
 ------------
@@ -18,6 +18,6 @@ Project Organization
 
 ------------
 
-Browse [Forest Plots STAC](https://radiantearth.github.io/stac-browser/#/external/fbstac-stands.s3.amazonaws.com/plots/catalog/catalog.json)
+Browse [TreeForCaSt STAC](https://radiantearth.github.io/stac-browser/#/external/fbstac-stands.s3.amazonaws.com/plots/catalog/catalog.json)
 
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>

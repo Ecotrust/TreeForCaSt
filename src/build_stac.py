@@ -491,8 +491,8 @@ def build_stac(rootpath: Path, run_as: str = "dev"):
     # Build catalog
     fbench = Catalog(
         id="fbstac-plots",
-        description="Oregon and Washington State forest plots, attributes, and imagery STAC for forest benchmarking and modeling.",
-        title="Forest plots STAC for benchmarking and modeling.",
+        description="A Spatio-Temporal Asset Catalog (STAC) for Modeling Forest Composition and Structure in the Pacific Northwest",
+        title="TreeForCaSt.",
     )
 
     today = datetime.datetime.today()

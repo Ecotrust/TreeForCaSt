@@ -1,4 +1,4 @@
-""" Utility functions for browsing and downloading from the ForestPlots STAC"""
+""" Utility functions for browsing and downloading from TreeForCaSt STAC"""
 import os
 import wget
 from pystac import Item
